@@ -6,13 +6,12 @@ class TrainingPage extends StatefulWidget {
   const TrainingPage({super.key});
 
   @override
-  State<TrainingPage> createState() => _TrainingPageState();
+ State<TrainingPage> createState() => _TrainingPageState();
 }
 
 class _TrainingPageState extends State<TrainingPage> {
   bool _cameraPermissionGranted = false;
   bool _checkingPermissions = true;
-  bool _isNavigating = false; // Prevent multiple navigation
 
   @override
   void initState() {
@@ -29,6 +28,7 @@ class _TrainingPageState extends State<TrainingPage> {
         _checkingPermissions = false;
         _cameraPermissionGranted = cameraStatus.isGranted && audioStatus.isGranted;
       });
+      // **HAPUS logika auto-navigasi dari sini**
     }
   }
 
@@ -44,27 +44,18 @@ class _TrainingPageState extends State<TrainingPage> {
       setState(() {
         _cameraPermissionGranted = granted;
       });
-      
-      if (granted) {
-        _navigateToCapture();
-      }
     }
   }
 
   void _navigateToCapture() async {
-    if (_isNavigating) return;
-    _isNavigating = true;
-    
-    // Use pushReplacement to avoid stacking
-    await Navigator.pushReplacement(
+    await Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => const TrainingCapturePage()),
     );
     
-    // Reset state when returning
+    // Setelah kembali, refresh status izin (tapi tidak auto-navigasi)
     if (mounted) {
-      _isNavigating = false;
-      _checkPermissions(); // Re-check permissions when coming back
+      _checkPermissions();
     }
   }
 
@@ -74,14 +65,7 @@ class _TrainingPageState extends State<TrainingPage> {
       return _buildLoadingScreen();
     }
 
-    // Jika sudah punya izin & tidak sedang navigate, langsung ke capture
-    if (_cameraPermissionGranted && !_isNavigating) {
-      Future.delayed(const Duration(milliseconds: 100), () {
-        if (mounted) _navigateToCapture();
-      });
-      return _buildLoadingScreen();
-    }
-
+    // **Selalu tampilkan UI permission request**
     return _buildPermissionRequest();
   }
 
@@ -113,64 +97,69 @@ class _TrainingPageState extends State<TrainingPage> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(
-                    Icons.camera_alt_outlined,
-                    size: 80,
-                    color: Color(0xFF0084FF),
-                  ),
+                  const Icon(Icons.camera_alt_outlined, size: 80, color: Color(0xFF0084FF)),
                   const SizedBox(height: 32),
                   
-                  // Teks utama dengan styling rapi
                   const Text(
                     'Izin Kamera & Mikrofon Diperlukan',
                     textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 21,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
-                      height: 1.4,
-                      letterSpacing: -0.3,
-                    ),
+                    style: TextStyle(fontSize: 21, fontWeight: FontWeight.bold, color: Colors.black87),
                   ),
                   
                   const SizedBox(height: 16),
                   
-                  // Teks deskripsi dengan styling rapi
-                  Text(
-                    'Aplikasi ini membutuhkan akses kamera untuk menganalisis gerakan Anda.',
-                    textAlign: TextAlign.center,
-                    softWrap: true,
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey[600],
-                      height: 1.5,
-                      letterSpacing: -0.2,
-                    ),
-                  ),
-                  
-                  const SizedBox(height: 40),
-                  
-                  SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: ElevatedButton(
-                      onPressed: _requestPermissions,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF0084FF),
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        elevation: 2,
-                        textStyle: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0.5,
-                        ),
+                  // **Tampilkan status izin dan tombol yang sesuai**
+                  if (_cameraPermissionGranted) ...[
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.green.shade200),
                       ),
-                      child: const Text('Izinkan Akses'),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.check_circle, color: Colors.green, size: 20),
+                          const SizedBox(width: 8),
+                          const Text(
+                            'Izin sudah diberikan',
+                            style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 14),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 48,
+                      child: ElevatedButton(
+                        onPressed: _navigateToCapture,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF0084FF),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          elevation: 2,
+                        ),
+                        child: const Text('Mulai Training', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ] else ...[
+                    Text(
+                      'Aplikasi ini membutuhkan akses kamera untuk menganalisis gerakan Anda.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                    ),
+                    const SizedBox(height: 40),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 48,
+                      child: ElevatedButton(
+                        onPressed: _requestPermissions,
+                        child: const Text('Izinkan Akses'),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),

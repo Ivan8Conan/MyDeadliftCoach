@@ -30,6 +30,7 @@ class _TrainingCapturePageState extends State<TrainingCapturePage> {
   bool _isMediaPipeLoaded = false;
   bool _isCameraReady = false;
   List<PoseKeypoint> _currentKeypoints = [];
+  bool _isDisposed = false;
 
   @override
   void initState() {
@@ -39,7 +40,7 @@ class _TrainingCapturePageState extends State<TrainingCapturePage> {
   }
 
   Future<void> _requestPermissions() async {
-    final cameraStatus = await Permission.camera.request();
+    final cameraStatus = await Permission.camera.status;
     if (cameraStatus.isGranted) {
       _setupServices();
     } else {
@@ -49,24 +50,29 @@ class _TrainingCapturePageState extends State<TrainingCapturePage> {
     }
   }
 
-  void _setupServices() async {
+  Future<void> _setupServices() async {
     _cameraService.onCameraStateChanged = (isActive) async {
-      if (mounted && isActive) {
+      if (mounted && isActive && !_isDisposed) {
         setState(() {
           _isCameraReady = true;
         });
+        
         await _mediaPipeService.initialize();
-        setState(() {
-          _isMediaPipeLoaded = true;
-        });
+        if (mounted && !_isDisposed) {
+          setState(() {
+            _isMediaPipeLoaded = true;
+          });
+        }
+        
         _mediaPipeService.onKeypointsUpdated = (keypoints) {
-          if (mounted) {
+          if (mounted && !_isDisposed) {
             setState(() {
               _currentKeypoints = keypoints;
               _postureStatus = _postureAnalysisService.analyzePosture(keypoints);
             });
           }
         };
+        
         _mediaPipeService.startDetection();
       }
     };
@@ -76,7 +82,7 @@ class _TrainingCapturePageState extends State<TrainingCapturePage> {
 
   void _startFpsCounter() {
     _fpsTimer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
-      if (mounted) {
+      if (mounted && !_isDisposed) {
         setState(() {
           _frameCount++;
           _currentFps = 28 + (_frameCount % 4);
@@ -86,68 +92,93 @@ class _TrainingCapturePageState extends State<TrainingCapturePage> {
   }
 
   void _toggleAudio() {
+    if (_isDisposed) return;
     _cameraService.toggleAudio();
     if (mounted) setState(() {});
   }
 
   void _startRecording() {
+    if (_isDisposed) return;
     _cameraService.startRecording();
     if (mounted) setState(() {});
   }
 
   void _stopRecording() async {
-    await _cameraService.stopRecording(); // Pastikan async
+    if (_isDisposed) return;
+    await _cameraService.stopRecording();
     if (mounted) setState(() {});
+  }
+
+  // Method baru untuk cleanup sebelum pop
+  Future<void> _cleanupBeforePop() async {
+    try {
+      // Hentikan timer
+      _fpsTimer?.cancel();
+      
+      // Hentikan recording jika sedang aktif
+      if (_cameraService.isRecording) {
+        await _cameraService.stopRecording();
+      }
+      
+      // Hentikan deteksi pose
+      _mediaPipeService.stopDetection();
+      
+      // Dispose service
+      _cameraService.dispose();
+      _mediaPipeService.dispose();
+      
+      _isDisposed = true;
+    } catch (e) {
+      print('Error during cleanup: $e');
+    }
   }
 
   @override
   void dispose() {
-    _fpsTimer?.cancel();
-    _mediaPipeService.dispose();
-    _cameraService.dispose();
+    _cleanupBeforePop();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
-      body: Stack(
-        children: [
-          // Video Layer
-          if (_isCameraReady && _cameraService.controller != null)
-            Positioned.fill(
-              child: CameraPreview(_cameraService.controller!),
-            ),
-          
-          // Canvas Overlay
-          if (_isMediaPipeLoaded && _currentKeypoints.isNotEmpty)
-            Positioned.fill(
-              child: CustomPaint(
-                painter: CameraOverlayPainter(
-                  keypoints: _currentKeypoints,
-                  videoSize: Size(
-                    _cameraService.controller!.value.previewSize!.width,
-                    _cameraService.controller!.value.previewSize!.height,
+        backgroundColor: Colors.black,
+        body: Stack(
+          children: [
+            // Video Layer
+            if (_isCameraReady && _cameraService.controller != null)
+              Positioned.fill(
+                child: CameraPreview(_cameraService.controller!),
+              ),
+            
+            // Canvas Overlay
+            if (_isMediaPipeLoaded && _currentKeypoints.isNotEmpty)
+              Positioned.fill(
+                child: CustomPaint(
+                  painter: CameraOverlayPainter(
+                    keypoints: _currentKeypoints,
+                    videoSize: Size(
+                      _cameraService.controller!.value.previewSize!.width,
+                      _cameraService.controller!.value.previewSize!.height,
+                    ),
                   ),
                 ),
               ),
+            
+            // UI Overlay
+            SafeArea(
+              child: Column(
+                children: [
+                  _buildTopBar(),
+                  Expanded(child: _buildCameraArea()),
+                  _buildFeedbackBox(),
+                  _buildActionButton(),
+                ],
+              ),
             ),
-          
-          // UI Overlay
-          SafeArea(
-            child: Column(
-              children: [
-                _buildTopBar(),
-                Expanded(child: _buildCameraArea()),
-                _buildFeedbackBox(),
-                _buildActionButton(),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
+          ],
+        ),    
+      );
   }
 
   Widget _buildTopBar() {
@@ -164,7 +195,12 @@ class _TrainingCapturePageState extends State<TrainingCapturePage> {
         children: [
           _buildControlButton(
             icon: Icons.arrow_back_ios_new,
-            onTap: () => Navigator.pop(context),
+            onTap: () async {
+              await _cleanupBeforePop();
+              if (mounted) {
+                Navigator.pop(context);
+              }
+            },
             color: Colors.white,
           ),
           

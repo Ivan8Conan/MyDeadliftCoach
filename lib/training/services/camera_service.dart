@@ -52,7 +52,6 @@ class CameraService {
     if (controller == null || isRecording || _isDisposed) return;
     
     try {
-      // Validasi state kamera
       if (!controller!.value.isInitialized) {
         print('❌ Camera not initialized');
         return;
@@ -77,15 +76,14 @@ class CameraService {
     if (controller == null || !isRecording || _isDisposed) return;
     
     try {
-      // Validasi state recording
       if (!controller!.value.isRecordingVideo) {
         print('❌ Not currently recording');
         isRecording = false;
         return;
       }
       
-      // Tunggu sebentar agar recording stabil
-      await Future.delayed(const Duration(milliseconds: 100));
+      // HAPUS delay ini jika masih error
+      // await Future.delayed(const Duration(milliseconds: 100));
       
       final file = await controller!.stopVideoRecording();
       isRecording = false;
@@ -94,18 +92,23 @@ class CameraService {
     } catch (e) {
       print('❌ Error stopping recording: $e');
       isRecording = false;
-      // Recovery: reset kamera jika error
-      if (!_isDisposed) {
-        await controller?.dispose();
-        controller = null;
-        isCameraActive = false;
-      }
     }
   }
 
   void dispose() {
     _isDisposed = true;
-    controller?.dispose();
+    try {
+      if (controller != null) {
+        if (controller!.value.isRecordingVideo) {
+          controller!.stopVideoRecording();
+        }
+        if (controller!.value.isInitialized) {
+          controller!.dispose();
+        }
+      }
+    } catch (e) {
+      print('Error disposing camera: $e');
+    }
     controller = null;
     print('🗑️ Camera service disposed');
   }
