@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
 
-class HistoryPage extends StatelessWidget {
+class HistoryPage extends StatefulWidget {
   const HistoryPage({super.key});
 
+  @override
+  State<HistoryPage> createState() => _HistoryPageState();
+}
+
+class _HistoryPageState extends State<HistoryPage> with SingleTickerProviderStateMixin {
   final Color _iosBgColor = const Color(0xFFF2F2F7);
   final Color _iosBlue = const Color(0xFF007AFF);
-  final Color _iosGreen = const Color(0xFF34C759);
   final Color _iosGrey = const Color(0xFF8E8E93);
-  final Color _iosRed = const Color(0xFFFF3B30);
+  late AnimationController _entranceController;
 
-  // Dummy Data untuk List (Descending)
   final List<Map<String, dynamic>> _sessions = const [
     {
       "date": "07 Jan 2026",
@@ -50,6 +53,22 @@ class HistoryPage extends StatelessWidget {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _entranceController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
+    _entranceController.forward();
+  }
+
+  @override
+  void dispose() {
+    _entranceController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _iosBgColor,
@@ -57,36 +76,105 @@ class HistoryPage extends StatelessWidget {
         bottom: false,
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
-          physics: const BouncingScrollPhysics(),
+          physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
           children: [
             // Header Halaman
-            const Text(
-              'Riwayat Latihan',
-              style: TextStyle(
-                fontSize: 34,
-                fontWeight: FontWeight.bold,
-                color: Colors.black,
-                letterSpacing: -1.0,
+            _buildAnimatedItem(
+              index: 0,
+              child: const Text(
+                'Riwayat Latihan',
+                style: TextStyle(
+                  fontSize: 34,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black,
+                  letterSpacing: -1.0,
+                ),
               ),
             ),
             const SizedBox(height: 24),
 
             // Ringkasan Mingguan
-            _buildSectionLabel("Ringkasan Mingguan"),
-            const SizedBox(height: 10),
-            _buildSummaryCard(),
+            _buildAnimatedItem(
+              index: 1,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildSectionLabel("Ringkasan Mingguan"),
+                  const SizedBox(height: 10),
+                  _BouncyCard(child: _buildSummaryCard()),
+                ],
+              ),
+            ),
 
             const SizedBox(height: 30),
 
+            // Daftar Sesi Label
+            _buildAnimatedItem(
+              index: 2,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildSectionLabel("Daftar Sesi (Terbaru)"),
+                  const SizedBox(height: 10),
+                ],
+              ),
+            ),
+
             // Daftar Sesi
-            _buildSectionLabel("Daftar Sesi (Terbaru)"),
-            const SizedBox(height: 10),
-            
-            // Loop data sessions
-            ..._sessions.map((session) => _buildSessionCard(session)),
+            ..._sessions.asMap().entries.map((entry) {
+              int index = entry.key;
+              Map<String, dynamic> session = entry.value;
+              
+              return _buildAnimatedItem(
+                index: 3 + index, 
+                child: _BouncyCard(
+                  onTap: () {
+                    print("Tapped session: ${session['date']}");
+                  },
+                  child: _buildSessionCard(session),
+                ),
+              );
+            }),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildAnimatedItem({required int index, required Widget child}) {
+    return AnimatedBuilder(
+      animation: _entranceController,
+      builder: (context, child) {
+        final double delay = (index * 0.1).clamp(0.0, 1.0); 
+        final double start = delay;
+        final double end = (start + 0.4).clamp(0.0, 1.0);
+
+        final Animation<double> fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+          CurvedAnimation(
+            parent: _entranceController,
+            curve: Interval(start, end, curve: Curves.easeOut),
+          ),
+        );
+
+        final Animation<Offset> slideAnimation = Tween<Offset>(
+          begin: const Offset(0, 0.1),
+          end: Offset.zero,
+        ).animate(
+          CurvedAnimation(
+            parent: _entranceController,
+            curve: Interval(start, end, curve: Curves.easeOutQuart), // Curve smooth ala iOS
+          ),
+        );
+
+        return FadeTransition(
+          opacity: fadeAnimation,
+          child: SlideTransition(
+            position: slideAnimation,
+            child: child,
+          ),
+        );
+      },
+      child: child,
     );
   }
 
@@ -118,7 +206,6 @@ class HistoryPage extends StatelessWidget {
       ),
       child: Row(
         children: [
-          // Total Reps
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -142,11 +229,8 @@ class HistoryPage extends StatelessWidget {
               ],
             ),
           ),
-          
           Container(height: 40, width: 1, color: Colors.grey.shade200),
           const SizedBox(width: 20),
-
-          // Rata-rata Skor
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -219,7 +303,6 @@ class HistoryPage extends StatelessWidget {
               Icon(Icons.arrow_forward_ios_rounded, size: 16, color: _iosGrey),
             ],
           ),
-          
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 12),
             child: Divider(height: 1, thickness: 0.5),
@@ -234,7 +317,6 @@ class HistoryPage extends StatelessWidget {
                   _buildMetricChip(Icons.repeat, "${session['reps']} Reps"),
                 ],
               ),
-              // Badge Skor
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
@@ -275,6 +357,66 @@ class HistoryPage extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _BouncyCard extends StatefulWidget {
+  final Widget child;
+  final VoidCallback? onTap;
+
+  const _BouncyCard({required this.child, this.onTap});
+
+  @override
+  State<_BouncyCard> createState() => _IOSBouncyCardState();
+}
+
+class _IOSBouncyCardState extends State<_BouncyCard> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 100),
+      reverseDuration: const Duration(milliseconds: 150),
+    );
+    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.96).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: (_) {
+        Feedback.forTap(context);
+        _controller.forward();
+      },
+      onTapUp: (_) {
+        _controller.reverse();
+        widget.onTap?.call();
+      },
+      onTapCancel: () {
+        _controller.reverse();
+      },
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, child) {
+          return Transform.scale(
+            scale: _scaleAnimation.value,
+            child: widget.child,
+          );
+        },
+      ),
     );
   }
 }
