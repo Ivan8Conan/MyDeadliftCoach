@@ -2,11 +2,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'homepage.dart';
 
+final RouteObserver<PageRoute> routeObserver = RouteObserver<PageRoute>();
+
 void main() {
   runApp(const MyApp());
 }
 
-// Widget Utama untuk Konfigurasi Aplikasi
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
@@ -19,6 +20,7 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF007BFF)),
         useMaterial3: true,
       ),
+      navigatorObservers: [routeObserver],
       home: const SplashScreen(),
     );
   }
