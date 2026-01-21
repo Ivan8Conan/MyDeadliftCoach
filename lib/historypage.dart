@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 class HistoryPage extends StatelessWidget {
   const HistoryPage({super.key});
 
-  // Warna Palet Khas iOS
   final Color _iosBgColor = const Color(0xFFF2F2F7);
   final Color _iosBlue = const Color(0xFF007AFF);
   final Color _iosGreen = const Color(0xFF34C759);
@@ -19,7 +18,7 @@ class HistoryPage extends StatelessWidget {
       "reps": 8,
       "score": 4.0,
       "status": "Baik",
-      "color": Colors.orange, // Representasi visual status
+      "color": Colors.orange,
     },
     {
       "date": "05 Jan 2026",
@@ -28,7 +27,7 @@ class HistoryPage extends StatelessWidget {
       "reps": 10,
       "score": 5.0,
       "status": "Sempurna",
-      "color": Color(0xFF34C759), // Hijau iOS
+      "color": Color(0xFF34C759),
     },
     {
       "date": "02 Jan 2026",
@@ -46,7 +45,7 @@ class HistoryPage extends StatelessWidget {
       "reps": 9,
       "score": 2.0,
       "status": "Buruk",
-      "color": Color(0xFFFF3B30), // Merah iOS
+      "color": Color(0xFFFF3B30),
     },
   ];
 
@@ -54,18 +53,17 @@ class HistoryPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _iosBgColor,
-      // SafeArea hanya atas, bawah false agar list bisa discroll di balik navbar
       body: SafeArea(
         bottom: false,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 100), // Padding bawah besar untuk navbar
-          physics: const BouncingScrollPhysics(), // Efek scroll iOS
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
+          physics: const BouncingScrollPhysics(),
           children: [
-            // [A] Header Halaman
+            // Header Halaman
             const Text(
               'Riwayat Latihan',
               style: TextStyle(
-                fontSize: 34, // Large Title iOS standard
+                fontSize: 34,
                 fontWeight: FontWeight.bold,
                 color: Colors.black,
                 letterSpacing: -1.0,
@@ -73,14 +71,14 @@ class HistoryPage extends StatelessWidget {
             ),
             const SizedBox(height: 24),
 
-            // [B] Ringkasan Mingguan
+            // Ringkasan Mingguan
             _buildSectionLabel("Ringkasan Mingguan"),
             const SizedBox(height: 10),
             _buildSummaryCard(),
 
             const SizedBox(height: 30),
 
-            // [C] Daftar Sesi
+            // Daftar Sesi
             _buildSectionLabel("Daftar Sesi (Terbaru)"),
             const SizedBox(height: 10),
             
@@ -92,7 +90,6 @@ class HistoryPage extends StatelessWidget {
     );
   }
 
-  // Widget Helper untuk Label Section
   Widget _buildSectionLabel(String text) {
     return Text(
       text.toUpperCase(),
@@ -105,7 +102,6 @@ class HistoryPage extends StatelessWidget {
     );
   }
 
-  // [B] Widget Kartu Ringkasan (Summary)
   Widget _buildSummaryCard() {
     return Container(
       padding: const EdgeInsets.all(20),
@@ -122,7 +118,7 @@ class HistoryPage extends StatelessWidget {
       ),
       child: Row(
         children: [
-          // Kolom 1: Total Reps
+          // Total Reps
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -147,11 +143,10 @@ class HistoryPage extends StatelessWidget {
             ),
           ),
           
-          // Garis Pemisah Vertikal
           Container(height: 40, width: 1, color: Colors.grey.shade200),
           const SizedBox(width: 20),
 
-          // Kolom 2: Rata-rata Skor
+          // Rata-rata Skor
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -180,7 +175,6 @@ class HistoryPage extends StatelessWidget {
     );
   }
 
-  // [C] Widget Kartu Sesi (List Item)
   Widget _buildSessionCard(Map<String, dynamic> session) {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -198,7 +192,6 @@ class HistoryPage extends StatelessWidget {
       ),
       child: Column(
         children: [
-          // Baris Atas: Tanggal & Panah Detail
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -223,7 +216,6 @@ class HistoryPage extends StatelessWidget {
                   ),
                 ],
               ),
-              // Tombol Detail (Chevron)
               Icon(Icons.arrow_forward_ios_rounded, size: 16, color: _iosGrey),
             ],
           ),
@@ -232,12 +224,9 @@ class HistoryPage extends StatelessWidget {
             padding: EdgeInsets.symmetric(vertical: 12),
             child: Divider(height: 1, thickness: 0.5),
           ),
-
-          // Baris Bawah: Metrik & Skor
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              // Info Durasi & Reps
               Row(
                 children: [
                   _buildMetricChip(Icons.timer_outlined, session['duration']),
@@ -245,7 +234,6 @@ class HistoryPage extends StatelessWidget {
                   _buildMetricChip(Icons.repeat, "${session['reps']} Reps"),
                 ],
               ),
-              
               // Badge Skor
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -273,7 +261,6 @@ class HistoryPage extends StatelessWidget {
     );
   }
 
-  // Helper Kecil untuk Chip (Durasi/Reps)
   Widget _buildMetricChip(IconData icon, String label) {
     return Row(
       children: [
@@ -281,7 +268,7 @@ class HistoryPage extends StatelessWidget {
         const SizedBox(width: 4),
         Text(
           label,
-          style: TextStyle(
+          style: const TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w500,
             color: Colors.black87,

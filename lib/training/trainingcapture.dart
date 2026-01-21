@@ -2,13 +2,33 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:permission_handler/permission_handler.dart';
-// Pastikan import ini sesuai dengan struktur folder Anda
 import './services/camera_service.dart';
 import './services/media_pipe_service.dart';
 import './services/posture_analysis_service.dart';
 import './models/posture_status.dart';
 import './models/pose_keypoint.dart';
 import './services/camera_overlay_painter.dart';
+
+class SimpleBouncingButton extends StatefulWidget {
+  final Widget child;
+  final VoidCallback onTap;
+  const SimpleBouncingButton({super.key, required this.child, required this.onTap});
+  @override
+  State<SimpleBouncingButton> createState() => _SimpleBouncingButtonState();
+}
+class _SimpleBouncingButtonState extends State<SimpleBouncingButton> with SingleTickerProviderStateMixin {
+  double _scale = 1.0;
+  void _onTapDown(_) => setState(() => _scale = 0.9);
+  void _onTapUp(_) { setState(() => _scale = 1.0); widget.onTap(); }
+  void _onTapCancel() => setState(() => _scale = 1.0);
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: _onTapDown, onTapUp: _onTapUp, onTapCancel: _onTapCancel,
+      child: AnimatedScale(scale: _scale, duration: const Duration(milliseconds: 100), child: widget.child),
+    );
+  }
+}
 
 class TrainingCapturePage extends StatefulWidget {
   const TrainingCapturePage({super.key});
@@ -18,12 +38,10 @@ class TrainingCapturePage extends StatefulWidget {
 }
 
 class _TrainingCapturePageState extends State<TrainingCapturePage> {
-  // Service Instances
   final CameraService _cameraService = CameraService();
   final MediaPipeService _mediaPipeService = MediaPipeService();
   final PostureAnalysisService _postureAnalysisService = PostureAnalysisService();
 
-  // State Variables
   int _currentFps = 0;
   Timer? _fpsTimer;
   int _frameCount = 0;
@@ -77,7 +95,6 @@ class _TrainingCapturePageState extends State<TrainingCapturePage> {
     _fpsTimer = Timer.periodic(const Duration(milliseconds: 500), (timer) {
       if (mounted && !_isDisposed) {
         setState(() {
-          // Simulasi FPS atau hitung real frame jika ada logic-nya
           _currentFps = _currentKeypoints.isEmpty ? 0 : 28 + (_frameCount++ % 4);
         });
       }
@@ -123,7 +140,6 @@ class _TrainingCapturePageState extends State<TrainingCapturePage> {
 
   @override
   Widget build(BuildContext context) {
-    // Ukuran layar untuk handling overlay
     final size = MediaQuery.of(context).size;
 
     return Scaffold(
@@ -131,7 +147,7 @@ class _TrainingCapturePageState extends State<TrainingCapturePage> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // LAYER 1: Camera Feed (Immersive)
+          // LAYER 1: Camera Feed
           if (_isCameraReady && _cameraService.controller != null)
             SizedBox(
               width: size.width,
@@ -148,57 +164,44 @@ class _TrainingCapturePageState extends State<TrainingCapturePage> {
                 painter: CameraOverlayPainter(
                   keypoints: _currentKeypoints,
                   videoSize: Size(
-                    _cameraService.controller!.value.previewSize!.height, // Swap W/H jika portrait
+                    _cameraService.controller!.value.previewSize!.height,
                     _cameraService.controller!.value.previewSize!.width,
                   ),
+                  lensDirection: _cameraService.lensDirection, // Kirim arah kamera
                 ),
               ),
             ),
 
           // LAYER 3: UI Gradient & Controls
-          // Gradient atas untuk status bar agar terlihat jelas
           Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            height: 120,
+            top: 0, left: 0, right: 0, height: 120,
             child: Container(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [Colors.black.withOpacity(0.7), Colors.transparent],
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
+                  begin: Alignment.topCenter, end: Alignment.bottomCenter,
                 ),
               ),
             ),
           ),
 
-          // Gradient bawah untuk controls
           Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            height: 200,
+            bottom: 0, left: 0, right: 0, height: 200,
             child: Container(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [Colors.transparent, Colors.black.withOpacity(0.8)],
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
+                  begin: Alignment.topCenter, end: Alignment.bottomCenter,
                 ),
               ),
             ),
           ),
 
-          // UI Elements
           SafeArea(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                // Top Bar: Back & Status
                 _buildModernHeader(),
-
-                // Bottom Area: Feedback & Recording
                 Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -216,23 +219,19 @@ class _TrainingCapturePageState extends State<TrainingCapturePage> {
     );
   }
 
-  // --- WIDGET BUILDERS ---
-
   Widget _buildModernHeader() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // Tombol Kembali (Circle Glassmorphism)
-          GestureDetector(
+          SimpleBouncingButton(
             onTap: () async {
               await _cleanupBeforePop();
               if (mounted) Navigator.pop(context);
             },
             child: Container(
-              width: 44,
-              height: 44,
+              width: 44, height: 44,
               decoration: BoxDecoration(
                 color: Colors.black.withOpacity(0.3),
                 shape: BoxShape.circle,
@@ -241,20 +240,15 @@ class _TrainingCapturePageState extends State<TrainingCapturePage> {
               child: const Icon(Icons.close, color: Colors.white, size: 24),
             ),
           ),
-
-          // Status Indicators (Capsules)
           Row(
             children: [
-              // ML/FPS Status
               _buildStatusPill(
                 icon: Icons.monitor_heart_outlined,
-                text: _currentFps > 0 ? "$_currentFps FPS" : "Loading...",
+                text: _currentFps > 0 ? "$_currentFps FPS" : "...",
                 color: _currentFps > 15 ? Colors.greenAccent : Colors.orangeAccent,
               ),
               const SizedBox(width: 8),
-              
-              // Audio Toggle
-              GestureDetector(
+              SimpleBouncingButton(
                 onTap: _toggleAudio,
                 child: _buildStatusPill(
                   icon: _cameraService.isAudioEnabled ? Icons.mic : Icons.mic_off,
@@ -270,12 +264,7 @@ class _TrainingCapturePageState extends State<TrainingCapturePage> {
     );
   }
 
-  Widget _buildStatusPill({
-    required IconData icon,
-    required String text,
-    required Color color,
-    bool isActionable = false,
-  }) {
+  Widget _buildStatusPill({required IconData icon, required String text, required Color color, bool isActionable = false}) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
@@ -287,60 +276,44 @@ class _TrainingCapturePageState extends State<TrainingCapturePage> {
         children: [
           Icon(icon, color: color, size: 14),
           const SizedBox(width: 6),
-          Text(
-            text,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
+          Text(text, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
         ],
       ),
     );
   }
 
   Widget _buildFloatingFeedback() {
-    // Jangan tampilkan jika belum ada data
     if (!_isMediaPipeLoaded || _currentKeypoints.isEmpty) return const SizedBox.shrink();
 
     final isGood = _postureStatus.isGood;
     final color = isGood ? const Color(0xFF4CAF50) : const Color(0xFFE53935);
 
-    return AnimatedContainer(
+    return AnimatedSwitcher(
       duration: const Duration(milliseconds: 300),
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.9), // Sedikit transparan
-        borderRadius: BorderRadius.circular(30),
-        boxShadow: [
-          BoxShadow(
-            color: color.withOpacity(0.4),
-            blurRadius: 15,
-            spreadRadius: 2,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            isGood ? Icons.check_circle : Icons.warning_rounded,
-            color: Colors.white,
-            size: 24,
-          ),
-          const SizedBox(width: 12),
-          Text(
-            _postureStatus.message.toUpperCase(),
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 18, // Font besar agar terbaca dari jauh
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1.0,
+      transitionBuilder: (Widget child, Animation<double> animation) {
+        return ScaleTransition(scale: animation, child: FadeTransition(opacity: animation, child: child));
+      },
+      child: Container(
+        key: ValueKey<String>(_postureStatus.message),
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.9),
+          borderRadius: BorderRadius.circular(30),
+          boxShadow: [
+            BoxShadow(color: color.withOpacity(0.4), blurRadius: 15, offset: const Offset(0, 4)),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(isGood ? Icons.check_circle : Icons.warning_rounded, color: Colors.white, size: 24),
+            const SizedBox(width: 12),
+            Text(
+              _postureStatus.message.toUpperCase(),
+              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 1.0),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -351,61 +324,45 @@ class _TrainingCapturePageState extends State<TrainingCapturePage> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
-        // Dummy Spacer (Kiri) agar tombol tengah pas
         const SizedBox(width: 60),
-
-        // Shutter Button (iPhone Style)
-        GestureDetector(
+        SimpleBouncingButton(
           onTap: _toggleRecording,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 300),
-            width: 80,
-            height: 80,
+            curve: Curves.easeOutBack,
+            width: 80, height: 80,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              border: Border.all(
-                color: Colors.white,
-                width: 6, // Ring tebal putih
-              ),
+              border: Border.all(color: Colors.white, width: 6),
               color: Colors.transparent,
             ),
             child: Center(
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
-                width: isRecording ? 30 : 64, // Mengecil saat rekam
+                width: isRecording ? 30 : 64,
                 height: isRecording ? 30 : 64,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFF3B30), // Warna merah khas record
-                  borderRadius: BorderRadius.circular(isRecording ? 4 : 50), // Bulat jadi kotak
+                  color: const Color(0xFFFF3B30),
+                  borderRadius: BorderRadius.circular(isRecording ? 4 : 50),
                 ),
               ),
             ),
           ),
         ),
-
-        // Indikator Durasi (Hanya muncul saat merekam) / Spacer Kanan
         SizedBox(
           width: 60,
           child: isRecording
               ? Column(
                   children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: const BoxDecoration(
-                        color: Colors.red,
-                        shape: BoxShape.circle,
+                    FadeTransition(
+                      opacity: AlwaysStoppedAnimation(1),
+                      child: Container(
+                        width: 8, height: 8,
+                        decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
                       ),
                     ),
                     const SizedBox(height: 4),
-                    const Text(
-                      "REC",
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    )
+                    const Text("REC", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold))
                   ],
                 )
               : null,
