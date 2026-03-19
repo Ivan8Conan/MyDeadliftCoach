@@ -1,34 +1,12 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
-import 'package:permission_handler/permission_handler.dart';
+import './models/pose_keypoint.dart';
+import './models/posture_status.dart';
 import './services/camera_service.dart';
+import './services/camera_overlay_painter.dart';
 import './services/media_pipe_service.dart';
 import './services/posture_analysis_service.dart';
-import './models/posture_status.dart';
-import './models/pose_keypoint.dart';
-import './services/camera_overlay_painter.dart';
-
-class SimpleBouncingButton extends StatefulWidget {
-  final Widget child;
-  final VoidCallback onTap;
-  const SimpleBouncingButton({super.key, required this.child, required this.onTap});
-  @override
-  State<SimpleBouncingButton> createState() => _SimpleBouncingButtonState();
-}
-class _SimpleBouncingButtonState extends State<SimpleBouncingButton> with SingleTickerProviderStateMixin {
-  double _scale = 1.0;
-  void _onTapDown(_) => setState(() => _scale = 0.9);
-  void _onTapUp(_) { setState(() => _scale = 1.0); widget.onTap(); }
-  void _onTapCancel() => setState(() => _scale = 1.0);
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTapDown: _onTapDown, onTapUp: _onTapUp, onTapCancel: _onTapCancel,
-      child: AnimatedScale(scale: _scale, duration: const Duration(milliseconds: 100), child: widget.child),
-    );
-  }
-}
+import 'package:permission_handler/permission_handler.dart';
 
 class TrainingCapturePage extends StatefulWidget {
   const TrainingCapturePage({super.key});
@@ -40,277 +18,274 @@ class TrainingCapturePage extends StatefulWidget {
 class _TrainingCapturePageState extends State<TrainingCapturePage> {
   final CameraService _cameraService = CameraService();
   final MediaPipeService _mediaPipeService = MediaPipeService();
-  final PostureAnalysisService _postureAnalysisService = PostureAnalysisService();
+  final PostureAnalysisService _postureService = PostureAnalysisService();
 
-  int _currentFps = 0;
-  Timer? _fpsTimer;
-  int _frameCount = 0;
-  PostureStatus _postureStatus = PostureStatus.loading();
-  bool _isMediaPipeLoaded = false;
   bool _isCameraReady = false;
-  List<PoseKeypoint> _currentKeypoints = [];
+  bool _isMediaPipeLoaded = false;
+  bool _isRecording = false;
   bool _isDisposed = false;
+
+  List<PoseKeypoint> _keypoints = [];
+  PostureStatus _status = PostureStatus.loading();
+
+  // Tampilkan hasil ML selama beberapa detik
+  PostureStatus? _pinnedResult;
+  DateTime? _pinnedAt;
+  static const _pinDuration = Duration(seconds: 3);
 
   @override
   void initState() {
     super.initState();
-    _requestPermissions();
-    _startFpsCounter();
+    _setup();
   }
 
-  Future<void> _requestPermissions() async {
-    final cameraStatus = await Permission.camera.status;
-    if (cameraStatus.isGranted) {
-      _setupServices();
-    } else {
-      setState(() => _postureStatus = PostureStatus.error());
-    }
-  }
+  Future<void> _setup() async {
+    _mediaPipeService.onModelLoaded = (loaded) {
+      if (mounted && !_isDisposed) {
+        setState(() => _isMediaPipeLoaded = loaded);
+      }
+    };
 
-  Future<void> _setupServices() async {
+    _mediaPipeService.onKeypointsUpdated = (keypoints) {
+      if (mounted && !_isDisposed && !_isRecording) {
+        final newStatus = _postureService.analyzePosture(keypoints);
+
+        // Pin hasil ML selama 3 detik
+        if (newStatus.message.contains('%') ||
+            newStatus.message.contains('BENAR') ||
+            newStatus.message.contains('LUTUT') ||
+            newStatus.message.contains('BUNGKUK')) {
+          _pinnedResult = newStatus;
+          _pinnedAt = DateTime.now();
+        }
+
+        setState(() {
+          _keypoints = keypoints;
+          _status = _getDisplayStatus(newStatus);
+        });
+      }
+    };
+
     _cameraService.onCameraStateChanged = (isActive) async {
       if (mounted && isActive && !_isDisposed) {
         setState(() => _isCameraReady = true);
-
         await _mediaPipeService.initialize();
-        if (mounted && !_isDisposed) {
-          setState(() => _isMediaPipeLoaded = true);
-        }
 
-        _mediaPipeService.onKeypointsUpdated = (keypoints) {
-          if (mounted && !_isDisposed) {
-            setState(() {
-              _currentKeypoints = keypoints;
-              _postureStatus = _postureAnalysisService.analyzePosture(keypoints);
-            });
-          }
+        // Sambungkan stream kamera ke ML Kit
+        _cameraService.onImageAvailable = (inputImage) {
+          _mediaPipeService.processImage(inputImage);
         };
+
         _mediaPipeService.startDetection();
       }
     };
-    await _cameraService.initializeCamera();
-  }
 
-  void _startFpsCounter() {
-    _fpsTimer = Timer.periodic(const Duration(milliseconds: 500), (timer) {
+    _cameraService.onRecordingStateChanged = (isRecording) {
       if (mounted && !_isDisposed) {
-        setState(() {
-          _currentFps = _currentKeypoints.isEmpty ? 0 : 28 + (_frameCount++ % 4);
-        });
+        setState(() => _isRecording = isRecording);
       }
-    });
-  }
+    };
 
-  void _toggleAudio() {
-    if (_isDisposed) return;
-    _cameraService.toggleAudio();
-    if (mounted) setState(() {});
-  }
-
-  void _toggleRecording() {
-    if (_isDisposed) return;
-    if (_cameraService.isRecording) {
-      _cameraService.stopRecording();
-    } else {
-      _cameraService.startRecording();
-    }
-    if (mounted) setState(() {});
-  }
-
-  Future<void> _cleanupBeforePop() async {
     try {
-      _fpsTimer?.cancel();
-      if (_cameraService.isRecording) {
-        await _cameraService.stopRecording();
-      }
-      _mediaPipeService.stopDetection();
-      _cameraService.dispose();
-      _mediaPipeService.dispose();
-      _isDisposed = true;
+      await _cameraService.initializeCamera();
     } catch (e) {
-      debugPrint('Error during cleanup: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal membuka kamera: $e')),
+        );
+      }
+    }
+  }
+
+  PostureStatus _getDisplayStatus(PostureStatus latest) {
+    // Jika ada hasil ML yang masih dalam durasi pin, tampilkan itu
+    if (_pinnedResult != null && _pinnedAt != null) {
+      if (DateTime.now().difference(_pinnedAt!) < _pinDuration) {
+        return _pinnedResult!;
+      }
+      _pinnedResult = null;
+    }
+    return latest;
+  }
+
+  Future<void> _toggleRecording() async {
+    if (_isRecording) {
+      final path = await _cameraService.stopRecording();
+      _postureService.reset();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(path != null
+                ? 'Video disimpan!'
+                : 'Recording dihentikan'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } else {
+      await _cameraService.startRecording();
     }
   }
 
   @override
   void dispose() {
-    _cleanupBeforePop();
+    _isDisposed = true;
+    _mediaPipeService.dispose();
+    _cameraService.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
-
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
-        fit: StackFit.expand,
         children: [
-          // LAYER 1: Camera Feed
-          if (_isCameraReady && _cameraService.controller != null)
-            SizedBox(
-              width: size.width,
-              height: size.height,
-              child: CameraPreview(_cameraService.controller!),
-            )
-          else
-            const Center(child: CircularProgressIndicator(color: Colors.white)),
+          // ── Layer 1: Camera Preview ─────────────────────────────
+          _buildCameraPreview(),
 
-          // LAYER 2: Skeleton Overlay
-          if (_isMediaPipeLoaded && _currentKeypoints.isNotEmpty)
-            Positioned.fill(
-              child: CustomPaint(
-                painter: CameraOverlayPainter(
-                  keypoints: _currentKeypoints,
-                  videoSize: Size(
-                    _cameraService.controller!.value.previewSize!.height,
-                    _cameraService.controller!.value.previewSize!.width,
-                  ),
-                  lensDirection: _cameraService.lensDirection, // Kirim arah kamera
-                ),
-              ),
-            ),
+          // ── Layer 2: Skeleton Overlay ───────────────────────────
+          if (_isCameraReady && _keypoints.isNotEmpty)
+            _buildSkeletonOverlay(),
 
-          // LAYER 3: UI Gradient & Controls
+          // ── Layer 3: Top Bar ────────────────────────────────────
+          _buildTopBar(),
+
+          // ── Layer 4: Status Feedback ────────────────────────────
           Positioned(
-            top: 0, left: 0, right: 0, height: 120,
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Colors.black.withOpacity(0.7), Colors.transparent],
-                  begin: Alignment.topCenter, end: Alignment.bottomCenter,
-                ),
-              ),
-            ),
+            bottom: 120,
+            left: 16,
+            right: 16,
+            child: _buildStatusCard(),
           ),
 
+          // ── Layer 5: Bottom Controls ────────────────────────────
           Positioned(
-            bottom: 0, left: 0, right: 0, height: 200,
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Colors.transparent, Colors.black.withOpacity(0.8)],
-                  begin: Alignment.topCenter, end: Alignment.bottomCenter,
-                ),
-              ),
-            ),
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: _buildBottomControls(),
           ),
 
-          SafeArea(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                _buildModernHeader(),
-                Column(
+          // ── Layer 6: Loading overlay ────────────────────────────
+          if (!_isCameraReady || !_isMediaPipeLoaded)
+            _buildLoadingOverlay(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCameraPreview() {
+    if (!_isCameraReady || _cameraService.controller == null) {
+      return Container(color: Colors.black);
+    }
+    return SizedBox.expand(
+      child: CameraPreview(_cameraService.controller!),
+    );
+  }
+
+  Widget _buildSkeletonOverlay() {
+    final controller = _cameraService.controller;
+    if (controller == null) return const SizedBox();
+
+    final previewSize = controller.value.previewSize;
+    if (previewSize == null) return const SizedBox();
+
+    return SizedBox.expand(
+      child: CustomPaint(
+        painter: CameraOverlayPainter(
+          keypoints: _keypoints,
+          videoSize: Size(previewSize.height, previewSize.width),
+          lensDirection: _cameraService.lensDirection,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTopBar() {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Row(
+          children: [
+            // Tombol kembali
+            GestureDetector(
+              onTap: () => Navigator.pop(context),
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.black45,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Icon(Icons.arrow_back, color: Colors.white),
+              ),
+            ),
+            const Spacer(),
+            // Indikator recording
+            if (_isRecording)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.red,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    _buildFloatingFeedback(),
-                    const SizedBox(height: 30),
-                    _buildShutterControl(),
-                    const SizedBox(height: 20),
+                    Icon(Icons.fiber_manual_record, color: Colors.white, size: 12),
+                    SizedBox(width: 4),
+                    Text('REC', style: TextStyle(color: Colors.white,
+                        fontWeight: FontWeight.bold, fontSize: 13)),
                   ],
                 ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildModernHeader() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          SimpleBouncingButton(
-            onTap: () async {
-              await _cleanupBeforePop();
-              if (mounted) Navigator.pop(context);
-            },
-            child: Container(
-              width: 44, height: 44,
+              ),
+            // Status gatekeeper
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.3),
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.white.withOpacity(0.2)),
+                color: Colors.black45,
+                borderRadius: BorderRadius.circular(12),
               ),
-              child: const Icon(Icons.close, color: Colors.white, size: 24),
+              child: Text(
+                _postureService.state,
+                style: const TextStyle(color: Colors.white70, fontSize: 12),
+              ),
             ),
-          ),
-          Row(
-            children: [
-              _buildStatusPill(
-                icon: Icons.monitor_heart_outlined,
-                text: _currentFps > 0 ? "$_currentFps FPS" : "...",
-                color: _currentFps > 15 ? Colors.greenAccent : Colors.orangeAccent,
-              ),
-              const SizedBox(width: 8),
-              SimpleBouncingButton(
-                onTap: _toggleAudio,
-                child: _buildStatusPill(
-                  icon: _cameraService.isAudioEnabled ? Icons.mic : Icons.mic_off,
-                  text: _cameraService.isAudioEnabled ? "ON" : "OFF",
-                  color: _cameraService.isAudioEnabled ? Colors.white : Colors.redAccent,
-                  isActionable: true,
-                ),
-              ),
-            ],
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildStatusPill({required IconData icon, required String text, required Color color, bool isActionable = false}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: isActionable ? Colors.white.withOpacity(0.2) : Colors.black.withOpacity(0.3),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.1)),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: color, size: 14),
-          const SizedBox(width: 6),
-          Text(text, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFloatingFeedback() {
-    if (!_isMediaPipeLoaded || _currentKeypoints.isEmpty) return const SizedBox.shrink();
-
-    final isGood = _postureStatus.isGood;
-    final color = isGood ? const Color(0xFF4CAF50) : const Color(0xFFE53935);
-
+  Widget _buildStatusCard() {
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 300),
-      transitionBuilder: (Widget child, Animation<double> animation) {
-        return ScaleTransition(scale: animation, child: FadeTransition(opacity: animation, child: child));
-      },
       child: Container(
-        key: ValueKey<String>(_postureStatus.message),
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+        key: ValueKey(_status.message),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.9),
-          borderRadius: BorderRadius.circular(30),
-          boxShadow: [
-            BoxShadow(color: color.withOpacity(0.4), blurRadius: 15, offset: const Offset(0, 4)),
-          ],
+          color: Colors.black.withOpacity(0.75),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: _status.color.withOpacity(0.6), width: 1.5),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(isGood ? Icons.check_circle : Icons.warning_rounded, color: Colors.white, size: 24),
-            const SizedBox(width: 12),
-            Text(
-              _postureStatus.message.toUpperCase(),
-              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 1.0),
+            Icon(_status.icon, color: _status.color, size: 22),
+            const SizedBox(width: 10),
+            Flexible(
+              child: Text(
+                _status.message,
+                style: TextStyle(
+                  color: _status.color,
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.5,
+                ),
+                textAlign: TextAlign.center,
+              ),
             ),
           ],
         ),
@@ -318,56 +293,120 @@ class _TrainingCapturePageState extends State<TrainingCapturePage> {
     );
   }
 
-  Widget _buildShutterControl() {
-    final isRecording = _cameraService.isRecording;
+  Widget _buildBottomControls() {
+    return Container(
+      height: 110,
+      color: Colors.black87,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          // Reset analisis
+          _circleButton(
+            icon: Icons.refresh,
+            label: 'Reset',
+            onTap: () {
+              _postureService.reset();
+              setState(() => _status = PostureStatus.standby());
+            },
+          ),
 
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-      children: [
-        const SizedBox(width: 60),
-        SimpleBouncingButton(
-          onTap: _toggleRecording,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeOutBack,
-            width: 80, height: 80,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: Colors.white, width: 6),
-              color: Colors.transparent,
-            ),
-            child: Center(
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                width: isRecording ? 30 : 64,
-                height: isRecording ? 30 : 64,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFF3B30),
-                  borderRadius: BorderRadius.circular(isRecording ? 4 : 50),
-                ),
+          // Record button (tengah, lebih besar)
+          GestureDetector(
+            onTap: _toggleRecording,
+            child: Container(
+              width: 72,
+              height: 72,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 3),
+                color: _isRecording ? Colors.red : Colors.transparent,
+              ),
+              child: Icon(
+                _isRecording ? Icons.stop : Icons.videocam,
+                color: Colors.white,
+                size: 32,
               ),
             ),
           ),
+
+          // Flip camera (placeholder — kamera depan fixed untuk deadlift)
+          _circleButton(
+            icon: Icons.info_outline,
+            label: 'Info',
+            onTap: () => _showInfoDialog(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _circleButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.white.withOpacity(0.15),
+            ),
+            child: Icon(icon, color: Colors.white, size: 22),
+          ),
+          const SizedBox(height: 4),
+          Text(label, style: const TextStyle(color: Colors.white60, fontSize: 11)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLoadingOverlay() {
+    return Container(
+      color: Colors.black87,
+      child: const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(color: Colors.white),
+            SizedBox(height: 16),
+            Text(
+              'Memuat kamera & model AI...',
+              style: TextStyle(color: Colors.white70, fontSize: 14),
+            ),
+          ],
         ),
-        SizedBox(
-          width: 60,
-          child: isRecording
-              ? Column(
-                  children: [
-                    FadeTransition(
-                      opacity: AlwaysStoppedAnimation(1),
-                      child: Container(
-                        width: 8, height: 8,
-                        decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text("REC", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold))
-                  ],
-                )
-              : null,
+      ),
+    );
+  }
+
+  void _showInfoDialog() {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFF1C1C1E),
+        title: const Text('Cara Penggunaan',
+            style: TextStyle(color: Colors.white)),
+        content: const Text(
+          '1. Posisikan HP di samping untuk tampak samping tubuh penuh\n'
+          '2. Pastikan seluruh badan terlihat di kamera\n'
+          '3. Mulai gerakan deadlift — sistem otomatis mendeteksi\n'
+          '4. Hasil analisis muncul setelah satu rep selesai\n'
+          '5. Tekan REC untuk merekam video latihan',
+          style: TextStyle(color: Colors.white70, height: 1.6),
         ),
-      ],
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK', style: TextStyle(color: Colors.blue)),
+          ),
+        ],
+      ),
     );
   }
 }
