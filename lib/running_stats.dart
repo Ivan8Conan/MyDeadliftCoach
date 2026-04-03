@@ -5,11 +5,11 @@ import 'dart:math';
 class RunningStats {
   int _n = 0;
   double _mean = 0;
-  double _m2 = 0; // untuk variance
+  double _m2 = 0;
   double _min = double.infinity;
   double _max = double.negativeInfinity;
 
-  // Untuk velocity (butuh nilai sebelumnya)
+  // Untuk velocity
   double? _prevValue;
   final List<double> _velocities = [];
   double _velocityStd = 0.0;

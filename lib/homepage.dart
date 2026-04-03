@@ -26,7 +26,6 @@ class _HomePageState extends State<HomePage>
 
   late final List<Widget> _pages;
 
-  // Animation controllers
   late AnimationController _profileController;
   late AnimationController _cardController;
   late AnimationController _tipsController;
@@ -36,7 +35,6 @@ class _HomePageState extends State<HomePage>
     super.initState();
     _carouselController = PageController(initialPage: 0);
 
-    // Animations
     _profileController = AnimationController(
       duration: const Duration(milliseconds: 350),
       vsync: this,
@@ -56,8 +54,6 @@ class _HomePageState extends State<HomePage>
       const HistoryPage(),
     ];
     _startAnimations();
-
-    // Mulai timer
     _startTimer();
   }
 
@@ -98,7 +94,7 @@ class _HomePageState extends State<HomePage>
   void didChangeDependencies() {
     super.didChangeDependencies();
     final modalRoute =
-        ModalRoute.of<dynamic>(context) as PageRoute<dynamic>?; // <-- cast
+        ModalRoute.of<dynamic>(context) as PageRoute<dynamic>?;
     if (modalRoute != null) routeObserver.subscribe(this, modalRoute);
   }
 
@@ -118,8 +114,15 @@ class _HomePageState extends State<HomePage>
 
   @override
   void didPopNext() {
-    if (_selectedIndex == 0) {
+    if (_selectedIndex == 0) _startTimer();
+  }
+
+  void _onItemTapped(int index) {
+    setState(() => _selectedIndex = index);
+    if (index == 0) {
       _startTimer();
+    } else {
+      _stopTimer();
     }
   }
 
@@ -166,12 +169,12 @@ class _HomePageState extends State<HomePage>
                             padding: const EdgeInsets.all(2),
                             decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                border: Border.all(color: Colors.grey.shade300)),
+                                border:
+                                    Border.all(color: Colors.grey.shade300)),
                             child: const CircleAvatar(
                                 radius: 20,
                                 backgroundColor: Colors.white,
-                                child:
-                                    Icon(Icons.person, color: Colors.grey)),
+                                child: Icon(Icons.person, color: Colors.grey)),
                           ),
                         ),
                       ),
@@ -191,12 +194,14 @@ class _HomePageState extends State<HomePage>
                   _buildAnimatedSectionHeader("Statistik Terakhir"),
                   const SizedBox(height: 12),
                   _buildAnimatedIOSWidget(
-                      controller: _cardController, child: _buildInfoContent()),
+                      controller: _cardController,
+                      child: _buildInfoContent()),
                   const SizedBox(height: 24),
                   _buildAnimatedSectionHeader("Tips Hari Ini"),
                   const SizedBox(height: 12),
                   _buildAnimatedIOSWidget(
-                      controller: _tipsController, child: _buildTipsContent()),
+                      controller: _tipsController,
+                      child: _buildTipsContent()),
                   const SizedBox(height: 100),
                 ],
               ),
@@ -247,8 +252,8 @@ class _HomePageState extends State<HomePage>
       animation: controller,
       builder: (context, child) => Transform.scale(
         scale: Tween<double>(begin: 0.95, end: 1.0)
-            .animate(CurvedAnimation(
-                parent: controller, curve: Curves.easeOutCubic))
+            .animate(
+                CurvedAnimation(parent: controller, curve: Curves.easeOutCubic))
             .value,
         child: Opacity(
           opacity: Tween<double>(begin: 0.0, end: 1.0)
@@ -457,22 +462,14 @@ class _HomePageState extends State<HomePage>
                     style:
                         TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                 SizedBox(height: 4),
-                Text("Mencegah cedera tulang belakang saat mengangkat beban.",
+                Text(
+                    "Mencegah cedera tulang belakang saat mengangkat beban.",
                     style: TextStyle(
                         color: Colors.grey, fontSize: 13, height: 1.4)),
               ]),
         ),
       ]),
     );
-  }
-
-  void _onItemTapped(int index) {
-    setState(() => _selectedIndex = index);
-    if (index == 0) {
-      _startTimer();
-    } else {
-      _stopTimer();
-    }
   }
 
   @override
@@ -514,9 +511,9 @@ class _HomePageState extends State<HomePage>
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
-                  _buildGlassIcon(0, Icons.home_rounded, 'Home'),
-                  _buildGlassIcon(1, Icons.fitness_center_rounded, 'Training'),
-                  _buildGlassIcon(2, Icons.history_rounded, 'Riwayat'),
+                  _buildNavItem(0, Icons.home_rounded, 'Home'),
+                  _buildNavItem(1, Icons.fitness_center_rounded, 'Training'),
+                  _buildNavItem(2, Icons.history_rounded, 'Riwayat'),
                 ],
               ),
             ),
@@ -526,10 +523,11 @@ class _HomePageState extends State<HomePage>
     );
   }
 
-  Widget _buildGlassIcon(int index, IconData icon, String label) {
+  Widget _buildNavItem(int index, IconData icon, String label) {
     final isSelected = _selectedIndex == index;
-    final activeColor = const Color(0xFF007AFF);
-    
+    const activeColor = Color(0xFF007AFF);
+    final inactiveColor = Colors.grey[400]!;
+
     return GestureDetector(
       onTap: () {
         Feedback.forTap(context);
@@ -537,62 +535,42 @@ class _HomePageState extends State<HomePage>
       },
       behavior: HitTestBehavior.opaque,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 500),
-        curve: Curves.fastLinearToSlowEaseIn, 
-        padding: EdgeInsets.symmetric(
-            vertical: 8, 
-            horizontal: isSelected ? 20 : 12
-        ),
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOutCubic,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
           color: isSelected
               ? activeColor.withOpacity(0.1)
               : Colors.transparent,
-          borderRadius: BorderRadius.circular(50),
+          borderRadius: BorderRadius.circular(20),
         ),
-        child: Row(
+        child: Column(
           mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            TweenAnimationBuilder(
-              duration: const Duration(milliseconds: 400),
-              curve: Curves.easeOutBack,
-              tween: Tween<double>(begin: 0.0, end: isSelected ? 1.0 : 0.0),
-              builder: (context, value, child) {
-                return Icon(
-                  icon,
-                  color: Color.lerp(
-                      Colors.grey[400], 
-                      activeColor, 
-                      isSelected ? 1.0 : 0.0
-                  ),
-                  size: 26,
-                );
-              },
-            ),
-            
             AnimatedContainer(
-              duration: const Duration(milliseconds: 400),
-              curve: Curves.fastLinearToSlowEaseIn,
-              width: isSelected ? 65 : 0,
-              child: ClipRect(
-                child: AnimatedOpacity(
-                  duration: const Duration(milliseconds: 300),
-                  opacity: isSelected ? 1.0 : 0.0,
-                  curve: Curves.easeIn,
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: 8),
-                    child: Text(
-                      label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: activeColor,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ),
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeOutBack,
+              transform: Matrix4.identity()
+                ..translate(0.0, isSelected ? -2.0 : 0.0),
+              child: Icon(
+                icon,
+                size: 24,
+                color: isSelected ? activeColor : inactiveColor,
               ),
+            ),
+            const SizedBox(height: 3),
+            AnimatedDefaultTextStyle(
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeOut,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight:
+                    isSelected ? FontWeight.w600 : FontWeight.w400,
+                color: isSelected ? activeColor : inactiveColor,
+                letterSpacing: isSelected ? 0.2 : 0.0,
+              ),
+              child: Text(label),
             ),
           ],
         ),

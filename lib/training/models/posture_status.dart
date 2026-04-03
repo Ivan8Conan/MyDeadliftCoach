@@ -13,7 +13,7 @@ class PostureStatus {
     required this.color,
   });
 
-  // Factory untuk hasil klasifikasi Machine Learning
+  // Hasil ML Classifier
   factory PostureStatus.fromLabel(String label, double confidence) {
     final pct = '${(confidence * 100).toStringAsFixed(0)}%';
     switch (label) {
@@ -43,47 +43,55 @@ class PostureStatus {
     }
   }
 
-  // Factory untuk Rule-Based (Gatekeeper) State
+  // Rule-Based (Gatekeeper)
   factory PostureStatus.recording(int frameCount) => PostureStatus(
-    message: ' MEREKAM...  ($frameCount frames)',
-    isGood: true,
-    icon: Icons.radio_button_on,
-    color: Colors.blueAccent,
-  );
+        message: ' MEREKAM...  ($frameCount frames)',
+        isGood: true,
+        icon: Icons.radio_button_on,
+        color: Colors.blueAccent,
+      );
 
   factory PostureStatus.standby() => PostureStatus(
-    message: 'SIAP — MULAI DEADLIFT',
-    isGood: true,
-    icon: Icons.accessibility_new,
-    color: Colors.white70,
-  );
+        message: 'SIAP — MULAI DEADLIFT',
+        isGood: true,
+        icon: Icons.accessibility_new,
+        color: Colors.white70,
+      );
 
-  // Factory untuk Error Handling dan UI States (YANG SEBELUMNYA HILANG)
+  /// [NEWFactory] — Tampilkan progress kalibrasi adaptif
+  factory PostureStatus.calibrating(int current, int total) => PostureStatus(
+        message: 'KALIBRASI... $current/$total — Berdiri tegak sebentar',
+        isGood: true,
+        icon: Icons.tune,
+        color: const Color(0xFFFF9F0A),
+      );
+
+  // Error & UI
   factory PostureStatus.notDetected() => PostureStatus(
-    message: "SUBJEK TIDAK TERDETEKSI",
-    isGood: false,
-    icon: Icons.person_off,
-    color: Colors.grey,
-  );
+        message: "SUBJEK TIDAK TERDETEKSI",
+        isGood: false,
+        icon: Icons.person_off,
+        color: Colors.grey,
+      );
 
   factory PostureStatus.notClear() => PostureStatus(
-    message: "POSISI KAMERA KURANG PAS",
-    isGood: false,
-    icon: Icons.visibility_off,
-    color: Colors.orange,
-  );
+        message: "POSISI KAMERA KURANG PAS",
+        isGood: false,
+        icon: Icons.visibility_off,
+        color: Colors.orange,
+      );
 
   factory PostureStatus.loading() => PostureStatus(
-    message: "MENYIAPKAN MODEL AI...",
-    isGood: true,
-    icon: Icons.hourglass_empty,
-    color: Colors.blue,
-  );
+        message: "MENYIAPKAN MODEL AI...",
+        isGood: true,
+        icon: Icons.hourglass_empty,
+        color: Colors.blue,
+      );
 
   factory PostureStatus.error() => PostureStatus(
-    message: "ERROR ANALISIS SISTEM",
-    isGood: false,
-    icon: Icons.error_outline,
-    color: Colors.redAccent,
-  );
+        message: "ERROR ANALISIS SISTEM",
+        isGood: false,
+        icon: Icons.error_outline,
+        color: Colors.redAccent,
+      );
 }
