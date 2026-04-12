@@ -1,7 +1,6 @@
 import 'dart:math';
 
-/// Kelas helper untuk menghitung statistik secara incremental (online)
-/// menggunakan algoritma Welford — O(1) memory, O(1) per update
+/// Algoritma Welford — O(1) memory, O(1) per update
 class RunningStats {
   int _n = 0;
   double _mean = 0;

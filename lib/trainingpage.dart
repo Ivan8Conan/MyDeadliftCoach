@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '/training/trainingcapture.dart';
+import '/training/info_training.dart';
 
 class TrainingPage extends StatefulWidget {
   const TrainingPage({super.key});
@@ -84,13 +85,20 @@ class _TrainingPageState extends State<TrainingPage> with SingleTickerProviderSt
     await Navigator.push(
       context,
       PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) => const TrainingCapturePage(),
+        pageBuilder: (context, animation, secondaryAnimation) => const InfoTrainingPage(),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          return FadeTransition(opacity: animation, child: child);
+          const begin = Offset(0.0, 1.0);
+          const end = Offset.zero;
+          const curve = Curves.easeOutQuart;
+          var tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+          
+          return SlideTransition(
+            position: animation.drive(tween),
+            child: child,
+          );
         },
       ),
     );
-    
     if (mounted) _checkPermissions();
   }
 

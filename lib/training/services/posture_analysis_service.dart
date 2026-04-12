@@ -819,6 +819,14 @@ double _avgVisibility(List<PoseKeypoint?> kps) {
 
 
 
+
+
+
+
+
+
+
+
 // // SEBELUM OPTIMASI
 // import 'dart:math';
 // import '../models/pose_keypoint.dart';

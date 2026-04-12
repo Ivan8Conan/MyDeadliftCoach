@@ -472,8 +472,7 @@ Future<void> _setup() async {
           '2. Berdiri tegak ~30 detik untuk kalibrasi otomatis threshold\n'
           '3. Pastikan seluruh badan terlihat di kamera\n'
           '4. Mulai gerakan deadlift — sistem otomatis mendeteksi\n'
-          '5. Hasil analisis muncul setelah satu rep selesai\n'
-          '6. Tekan REC untuk merekam video latihan',
+          '5. Hasil analisis muncul setelah satu rep selesai\n',
           style: TextStyle(color: Colors.white70, height: 1.6),
         ),
         actions: [
