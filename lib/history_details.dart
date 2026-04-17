@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:mydeadliftcouch/training/database/sqlite_helper.dart';
 
 class HistoryDetailsPage extends StatefulWidget {
@@ -47,6 +48,48 @@ class _HistoryDetailsPageState extends State<HistoryDetailsPage> {
     }
   }
 
+  void _confirmDelete() {
+    showCupertinoModalPopup(
+      context: context,
+      builder: (BuildContext ctx) {
+        return CupertinoActionSheet(
+          title: const Text(
+            "Hapus Riwayat Latihan?",
+            style: TextStyle(fontSize: 16),
+          ),
+          message: const Text(
+            "Sesi latihan ini dan semua log kesalahannya akan dihapus secara permanen. Tindakan ini tidak dapat dibatalkan.",
+            style: TextStyle(fontSize: 13),
+          ),
+          actions: <CupertinoActionSheetAction>[
+            CupertinoActionSheetAction(
+              isDestructiveAction: true,
+              onPressed: () async {
+                Navigator.of(ctx).pop();
+                
+                final sessionId = widget.sessionData['session_id'] as int;
+                await SQLiteHelper.instance.deleteSession(sessionId);
+                
+                if (mounted) {
+                  // Kembali ke History Page
+                  Navigator.of(context).pop(); 
+                }
+              },
+              child: const Text("Hapus Sesi", style: TextStyle(fontSize: 20)),
+            ),
+          ],
+          cancelButton: CupertinoActionSheetAction(
+            isDefaultAction: true, // Otomatis membuat teks Biru tebal ala iOS
+            onPressed: () {
+              Navigator.of(ctx).pop(); // Batal dan tutup
+            },
+            child: const Text("Batal", style: TextStyle(fontSize: 20)),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final reps = widget.sessionData['jumlah_repetisi'] ?? 0;
@@ -63,6 +106,13 @@ class _HistoryDetailsPageState extends State<HistoryDetailsPage> {
           "Detail Sesi",
           style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 17),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(CupertinoIcons.trash, color: CupertinoColors.destructiveRed, size: 22),
+            onPressed: _confirmDelete,
+          ),
+          const SizedBox(width: 8),
+        ],
       ),
       body: _isLoading
           ? Center(child: CircularProgressIndicator(color: _iosBlue))

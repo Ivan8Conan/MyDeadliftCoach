@@ -134,4 +134,14 @@ class SQLiteHelper {
       orderBy: 'time_error ASC',
     );
   }
+
+  // Hapus Sesi Latihan beserta semua log error-nya
+  Future<int> deleteSession(int sessionId) async {
+    Database db = await instance.database;
+    return await db.delete(
+      'training_sessions',
+      where: 'session_id = ?',
+      whereArgs: [sessionId],
+    );
+  }
 }
