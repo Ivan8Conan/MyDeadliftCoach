@@ -1,4 +1,4 @@
-package com.example.mydeadliftcouch
+package id.ac.ukdw.fti.mydeadliftcouch
 
 import io.flutter.embedding.android.FlutterActivity
 
