@@ -1,4 +1,5 @@
 // SUDAH DIOPTIMASI - Versi Final
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import './models/pose_keypoint.dart';
@@ -7,7 +8,9 @@ import './services/camera_service.dart';
 import './services/camera_overlay_painter.dart';
 import './services/media_pipe_service.dart';
 import './services/posture_analysis_service.dart';
+import './database/sqlite_helper.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'info_training.dart';
 
 class TrainingCapturePage extends StatefulWidget {
   const TrainingCapturePage({super.key});
@@ -23,8 +26,11 @@ class _TrainingCapturePageState extends State<TrainingCapturePage> {
 
   bool _isCameraReady = false;
   bool _isMediaPipeLoaded = false;
-  bool _isRecording = false;
   bool _isDisposed = false;
+
+  int? _currentSessionId;
+  int _totalRepetisi = 0;
+  int _errorCount = 0;
 
   List<PoseKeypoint> _keypoints = [];
   PostureStatus _status = PostureStatus.loading();
@@ -41,10 +47,12 @@ class _TrainingCapturePageState extends State<TrainingCapturePage> {
   }
 
 Future<void> _setup() async {
+  await _initDatabaseSession();
   await _postureService.initIsolate();
 
   // Sambungkan referensi kamera agar adaptive fps bisa bekerja
   _postureService.cameraServiceRef = _cameraService; //v2
+  _postureService.currentSessionId = _currentSessionId;
 
   _postureService.onClassificationResult = (result) {
     if (!mounted || _isDisposed) return;
@@ -52,6 +60,11 @@ Future<void> _setup() async {
       _pinnedResult = result;
       _pinnedAt = DateTime.now();
       _status = result;
+      _totalRepetisi++;
+
+      if (!result.isGood) {
+        _errorCount++;
+      }
     });
   };
 
@@ -67,7 +80,7 @@ Future<void> _setup() async {
   };
 
   _mediaPipeService.onKeypointsUpdated = (keypoints) {
-    if (mounted && !_isDisposed && !_isRecording) {
+    if (mounted && !_isDisposed) {
       final newStatus = _postureService.analyzePosture(keypoints);
       setState(() {
         _keypoints = keypoints;
@@ -88,12 +101,6 @@ Future<void> _setup() async {
     _mediaPipeService.startDetection();
   };
 
-  _cameraService.onRecordingStateChanged = (isRecording) {
-    if (mounted && !_isDisposed) {
-      setState(() => _isRecording = isRecording);
-    }
-  };
-
   try {
     await _cameraService.initializeCamera();
   } catch (e) {
@@ -105,6 +112,49 @@ Future<void> _setup() async {
   }
 }
 
+Future<void> _initDatabaseSession() async {
+    // BuatUser Dummy jika kosong
+    final db = await SQLiteHelper.instance.database;
+    final users = await db.query('users');
+    if (users.isEmpty) {
+      await SQLiteHelper.instance.insertUser({
+        'nama': 'Pengguna',
+        'level': 'Pemula',
+      });
+    }
+
+    // Membuat Sesi Baru
+    final sessionId = await SQLiteHelper.instance.insertSession({
+      'user_id': 1,
+      'tanggal': DateTime.now().toIso8601String().split('T')[0], // Format: YYYY-MM-DD
+      'waktu_mulai': DateTime.now().toIso8601String(),
+    });
+
+    setState(() {
+      _currentSessionId = sessionId;
+    });
+    print("ID User: $_currentSessionId");
+  }
+
+  Future<void> _closeDatabaseSession() async {
+    if (_currentSessionId != null) {
+      double finalScore = 0.0;
+      if (_totalRepetisi > 0) {
+        int validErrors = _errorCount > _totalRepetisi ? _totalRepetisi : _errorCount;
+        int correctReps = _totalRepetisi - validErrors;
+        
+        finalScore = (correctReps / _totalRepetisi) * 5.0;
+      }
+      
+      await SQLiteHelper.instance.updateSession(_currentSessionId!, {
+        'waktu_selesai': DateTime.now().toIso8601String(),
+        'jumlah_repetisi': _totalRepetisi,
+        'rating_efektivitas': double.parse(finalScore.toStringAsFixed(1)) 
+      });
+      print("Sesi Latihan Ditutup. Total Reps: $_totalRepetisi, Salah: $_errorCount, Skor: $finalScore");
+    }
+  }
+
   PostureStatus _getDisplayStatus(PostureStatus latest) {
     if (_pinnedResult != null && _pinnedAt != null) {
       if (DateTime.now().difference(_pinnedAt!) < _pinDuration) {
@@ -115,28 +165,10 @@ Future<void> _setup() async {
     return latest;
   }
 
-  // Recording control: start/stop recording, reset posture status saat stop
-  Future<void> _toggleRecording() async {
-    if (_isRecording) {
-      final path = await _cameraService.stopRecording();
-      _postureService.reset();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content:
-                Text(path != null ? 'Video disimpan!' : 'Recording dihentikan'),
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
-    } else {
-      await _cameraService.startRecording();
-    }
-  }
-
   @override
   void dispose() {
     _isDisposed = true;
+    _closeDatabaseSession();
     _postureService.dispose();
     _mediaPipeService.dispose();
     _cameraService.dispose();
@@ -171,10 +203,8 @@ Future<void> _setup() async {
           ),
 
           // Bottom Controls
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
+          Align(
+            alignment: Alignment.bottomCenter,
             child: _buildBottomControls(),
           ),
 
@@ -229,28 +259,7 @@ Future<void> _setup() async {
               ),
             ),
             const Spacer(),
-            if (_isRecording)
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.red,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.fiber_manual_record, color: Colors.white, size: 12),
-                    SizedBox(width: 4),
-                    Text('REC',
-                        style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13)),
-                  ],
-                ),
-              ),
-            const SizedBox(width: 8),
+
             // State indicator
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -261,7 +270,6 @@ Future<void> _setup() async {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Dot indikator state
                   Container(
                     width: 8,
                     height: 8,
@@ -339,30 +347,53 @@ Future<void> _setup() async {
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 300),
       child: Container(
-        key: ValueKey(_status.message),
+        key: ValueKey(_status.message + _status.explanation),
+        width: double.infinity, 
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.75),
+          color: Colors.black.withOpacity(0.85),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-              color: _status.color.withOpacity(0.6), width: 1.5),
+          border: Border.all(color: _status.color.withOpacity(0.6), width: 1.5),
+          boxShadow: [
+            BoxShadow(
+              color: _status.color.withOpacity(0.2),
+              blurRadius: 10,
+              spreadRadius: 2,
+            )
+          ],
         ),
         child: Row(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Icon(_status.icon, color: _status.color, size: 22),
-            const SizedBox(width: 10),
-            Flexible(
-              child: Text(
-                _status.message,
-                style: TextStyle(
-                  color: _status.color,
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 0.5,
-                ),
-                textAlign: TextAlign.center,
+            Icon(_status.icon, color: _status.color, size: 32),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _status.message.trim(),
+                    style: TextStyle(
+                      color: _status.color,
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  
+                  if (_status.explanation.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      _status.explanation,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 13,
+                        height: 1.3,
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
           ],
@@ -372,70 +403,84 @@ Future<void> _setup() async {
   }
 
   Widget _buildBottomControls() {
-    return Container(
-      height: 110,
-      color: Colors.black87,
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 40),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          _circleButton(
-            icon: Icons.refresh,
-            label: 'Reset',
-            onTap: () {
-              _postureService.reset();
-              setState(() => _status = PostureStatus.standby());
-            },
-          ),
-          // Tombol record
-          GestureDetector(
-            onTap: _toggleRecording,
-            child: Container(
-              width: 72,
-              height: 72,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 3),
-                color: _isRecording ? Colors.red : Colors.transparent,
-              ),
-              child: Icon(
-                _isRecording ? Icons.stop : Icons.videocam,
-                color: Colors.white,
-                size: 32,
+          ClipRRect(
+            borderRadius: BorderRadius.circular(30),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(30),
+                  border: Border.all(color: Colors.white.withOpacity(0.2), width: 1.5),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Tombol Reset
+                    _buildModernButton(
+                      icon: Icons.refresh_rounded,
+                      label: 'Reset',
+                      onTap: () {
+                        _postureService.reset();
+                        setState(() => _status = PostureStatus.standby());
+                      },
+                    ),
+                    
+                    // Garis Pemisah (Divider)
+                    Container(
+                      height: 40,
+                      width: 1,
+                      margin: const EdgeInsets.symmetric(horizontal: 20),
+                      color: Colors.white.withOpacity(0.3),
+                    ),
+                    
+                    // Tombol Panduan (Info Training Page)
+                    _buildModernButton(
+                      icon: Icons.lightbulb_outline_rounded,
+                      label: 'Panduan',
+                      onTap: _showInfoDialog,
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-          _circleButton(
-            icon: Icons.info_outline,
-            label: 'Info',
-            onTap: _showInfoDialog,
           ),
         ],
       ),
     );
   }
 
-  Widget _circleButton({
+  Widget _buildModernButton({
     required IconData icon,
     required String label,
     required VoidCallback onTap,
   }) {
     return GestureDetector(
-      onTap: onTap,
+      onTap: () {
+        Feedback.forTap(context);
+        onTap();
+      },
+      behavior: HitTestBehavior.opaque,
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: Colors.white.withOpacity(0.15),
-            ),
-            child: Icon(icon, color: Colors.white, size: 22),
-          ),
+          Icon(icon, color: Colors.white, size: 28),
           const SizedBox(height: 4),
-          Text(label,
-              style: const TextStyle(color: Colors.white60, fontSize: 11)),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.5,
+            ),
+          ),
         ],
       ),
     );
@@ -461,30 +506,34 @@ Future<void> _setup() async {
   }
 
   void _showInfoDialog() {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: const Color(0xFF1C1C1E),
-        title: const Text('Cara Penggunaan',
-            style: TextStyle(color: Colors.white)),
-        content: const Text(
-          '1. Posisikan HP di samping untuk tampak samping tubuh penuh\n'
-          '2. Berdiri tegak ~30 detik untuk kalibrasi otomatis threshold\n'
-          '3. Pastikan seluruh badan terlihat di kamera\n'
-          '4. Mulai gerakan deadlift — sistem otomatis mendeteksi\n'
-          '5. Hasil analisis muncul setelah satu rep selesai\n',
-          style: TextStyle(color: Colors.white70, height: 1.6),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('OK', style: TextStyle(color: Colors.blue)),
-          ),
-        ],
+    Navigator.push(
+      context,
+      PageRouteBuilder(
+        opaque: false, 
+        pageBuilder: (context, animation, secondaryAnimation) => const InfoTrainingPage(isFromTrainingPage: false),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          const begin = Offset(0.0, 1.0); 
+          const end = Offset.zero;
+          const curve = Curves.easeOutQuart;
+          var tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+          
+          return SlideTransition(
+            position: animation.drive(tween),
+            child: child,
+          );
+        },
       ),
     );
   }
 }
+
+
+
+
+
+
+
+
 
 
 

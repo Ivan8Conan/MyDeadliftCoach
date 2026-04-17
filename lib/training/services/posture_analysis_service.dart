@@ -432,11 +432,13 @@
 import 'dart:math';
 import 'dart:isolate';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 import '../models/pose_keypoint.dart';
 import '../models/posture_status.dart';
 import 'deadlift_classifier_modelv2.dart';
 import 'package:mydeadliftcouch/running_stats.dart';
 import 'camera_service.dart';
+import '../database/sqlite_helper.dart';
 
 class _IsolateRequest {
   final Map<String, double> features;
@@ -477,6 +479,7 @@ class PostureAnalysisService {
   ReceivePort? _classifierReceivePort;
   bool _isolateReady = false;
   bool _classifierBusy = false;
+  int? currentSessionId;
 
   // Referensi ke CameraService untuk adaptive fps
   // Diset dari luar sebelum digunakan
@@ -496,8 +499,6 @@ class PostureAnalysisService {
   static const int _idleThreshold = 8;
 
   // Frame skip — HANYA aktif saat IDLE dan SUDAH kalibrasi
-  // Saat belum kalibrasi: semua frame dikumpulkan untuk baseline
-  // Saat ACTIVE: tidak ada skip sama sekali
   int _frameCount = 0;
   static const int _frameSkip = 2;
 
@@ -516,6 +517,9 @@ class PostureAnalysisService {
 
   double _lututThreshold = 155.0;
   double _pinggulThreshold = 145.0;
+
+  // Inisialisasi Flutter TTS
+  final FlutterTts _flutterTts = FlutterTts();
 
   // Hasil ML
   String _lastLabel = '';
@@ -545,9 +549,10 @@ class PostureAnalysisService {
           _lastLabel = message.label;
           _lastConfidence = message.confidence;
           _hasNewResult = true;
-          final status =
-              PostureStatus.fromLabel(message.label, message.confidence);
+
+          final status = PostureStatus.fromLabel(message.label, message.confidence);
           onClassificationResult?.call(status);
+          _executeFeedback(_lastLabel);
         }
       }
     });
@@ -556,10 +561,7 @@ class PostureAnalysisService {
   PostureStatus analyzePosture(List<PoseKeypoint> keypoints) {
     if (keypoints.length < 25) return PostureStatus.notDetected();
     _frameCount++;
-    // ── Logika frame skip yang direvisi ──────────────────────────────────────
     // Skip HANYA jika: state IDLE AND sudah kalibrasi
-    // - Belum kalibrasi: jangan skip, butuh semua frame untuk baseline
-    // - State ACTIVE   : jangan skip, butuh semua frame untuk running stats
     if (_state == 'IDLE' && _isCalibrated && _frameCount % _frameSkip != 0) {
       return _buildCurrentStatus();
     }
@@ -655,10 +657,49 @@ class PostureAnalysisService {
       final features = _extractFeaturesFromStats();
       final classifier = DeadliftClassifier();
       final result = classifier.predict(features);
+
       _lastLabel     = result['label'] as String;
       _lastConfidence = result['confidence'] as double;
       _hasNewResult  = true;
+
+      _executeFeedback(_lastLabel);
     } catch (_) {}
+  }
+
+  Future<void> _executeFeedback(String label) async {
+    final statusObj = PostureStatus.fromLabel(label, _lastConfidence);
+    
+    if (statusObj.explanation.isNotEmpty) {
+      // Eksekusi Suara Indonesia (TTS)
+      try {
+        await _flutterTts.setLanguage("id-ID");
+        await _flutterTts.setVolume(1.0);
+        await _flutterTts.setSpeechRate(0.5);
+        await _flutterTts.setPitch(1.0);
+        await _flutterTts.speak(statusObj.explanation);
+        
+        print("${statusObj.explanation}");
+      } catch (e) {
+        print("TTS Error: $e");
+      }
+      
+      // Sinkronisasi Database SQLite
+      if (currentSessionId != null) {
+        try {
+          await SQLiteHelper.instance.insertErrorLog({
+            'session_id': currentSessionId,
+            'kode_error': statusObj.errorId,
+            'nama_error': statusObj.message.trim(),
+            'risiko': statusObj.isGood ? 'Aman' : 'Tinggi',
+            'pesan_teks': statusObj.explanation,
+            'is_played': 1,
+          });
+          print("Berhasil menyimpan log feedback!");
+        } catch (e) {
+          print("Gagal menyimpan database: $e");
+        }
+      }
+    }
   }
 
   Map<String, double> _extractFeaturesFromStats() {
@@ -739,7 +780,6 @@ Map<String, double>? _calculateAngles(List<PoseKeypoint> keypoints) {
       return null;
     }
 
-    // Toleransi visibilitas diturunkan sedikit (0.4) agar tidak mudah return null saat frame sedang throttle
     if ([shoulder, hip, knee, ankle].any((kp) => kp.visibility < 0.4)) {
       return null;
     }

@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'trainingcapture.dart';
 
 class InfoTrainingPage extends StatefulWidget {
-  const InfoTrainingPage({super.key});
+  final bool isFromTrainingPage;
+  const InfoTrainingPage({super.key, this.isFromTrainingPage = true});
 
   @override
   State<InfoTrainingPage> createState() => _InfoTrainingPageState();
@@ -44,15 +45,19 @@ class _InfoTrainingPageState extends State<InfoTrainingPage> {
 
   void _onNext() {
     if (_currentIndex == _onboardingData.length - 1) {
-      Navigator.pushReplacement(
-        context,
-        PageRouteBuilder(
-          pageBuilder: (context, animation, secondaryAnimation) => const TrainingCapturePage(),
-          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            return FadeTransition(opacity: animation, child: child);
-          },
-        ),
-      );
+      if (widget.isFromTrainingPage) {
+        Navigator.pushReplacement(
+          context,
+          PageRouteBuilder(
+            pageBuilder: (context, animation, secondaryAnimation) => const TrainingCapturePage(),
+            transitionsBuilder: (context, animation, secondaryAnimation, child) {
+              return FadeTransition(opacity: animation, child: child);
+            },
+          ),
+        );
+      } else {
+        Navigator.pop(context);
+      }
     } else {
       _pageController.nextPage(
         duration: const Duration(milliseconds: 400),

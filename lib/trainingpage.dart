@@ -85,7 +85,7 @@ class _TrainingPageState extends State<TrainingPage> with SingleTickerProviderSt
     await Navigator.push(
       context,
       PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) => const InfoTrainingPage(),
+        pageBuilder: (context, animation, secondaryAnimation) => const InfoTrainingPage(isFromTrainingPage: true),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           const begin = Offset(0.0, 1.0);
           const end = Offset.zero;
@@ -99,7 +99,11 @@ class _TrainingPageState extends State<TrainingPage> with SingleTickerProviderSt
         },
       ),
     );
-    if (mounted) _checkPermissions();
+    
+    if (mounted) {
+      _checkPermissions();
+      setState(() {}); 
+    }
   }
 
   @override
