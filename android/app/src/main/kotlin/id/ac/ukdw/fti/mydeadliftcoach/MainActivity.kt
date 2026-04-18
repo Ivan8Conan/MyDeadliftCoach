@@ -1,4 +1,4 @@
-package id.ac.ukdw.fti.mydeadliftcouch
+package id.ac.ukdw.fti.mydeadliftcoach
 
 import io.flutter.embedding.android.FlutterActivity
 
