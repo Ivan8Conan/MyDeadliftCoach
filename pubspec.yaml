@@ -54,6 +54,7 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^4.0.0
+  flutter_launcher_icons: ^0.14.4
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -72,6 +73,7 @@ flutter:
     - assets/images/deadlifttips1.webp
     - assets/images/deadlifttips2.jfif
     - assets/images/deadlifttips3.webp
+    - assets/images/LogoNativeSplash.png
   
 
   # An image asset can refer to one or more resolution-specific "variants", see
@@ -99,3 +101,19 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/LogoMyDeadliftCoach.png"
+  min_sdk_android: 21
+  adaptive_icon_background: "#0084FF"
+  adaptive_icon_foreground: "assets/images/LogoMyDeadliftCoach.png"
+
+flutter_native_splash:
+  color: "#0084FF"
+  image: assets/images/LogoNativeSplash.png
+  
+  android_12:
+    color: "#0084FF"
+    image: assets/images/LogoNativeSplash.png
