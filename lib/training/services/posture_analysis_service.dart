@@ -436,7 +436,7 @@ import 'package:flutter_tts/flutter_tts.dart';
 import '../models/pose_keypoint.dart';
 import '../models/posture_status.dart';
 import 'deadlift_classifier_modelv2.dart';
-import 'package:mydeadliftcouch/running_stats.dart';
+import 'package:MyDeadliftCoach/running_stats.dart';
 import 'camera_service.dart';
 import '../database/sqlite_helper.dart';
 

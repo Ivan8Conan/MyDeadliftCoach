@@ -45,7 +45,7 @@ class _SplashScreenState extends State<SplashScreen> {
 
   void _startSplashSequence() {
     // Tampilkan Logo selama 2 detik
-    Timer(const Duration(milliseconds: 2000), () {
+    Timer(const Duration(milliseconds: 3000), () {
       if (mounted) {
         setState(() {
           _showLoading = true;

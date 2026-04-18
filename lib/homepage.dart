@@ -3,7 +3,7 @@ import 'dart:ui';
 import 'dart:async';
 import 'trainingpage.dart';
 import 'historypage.dart';
-import 'package:mydeadliftcouch/training/database/sqlite_helper.dart';
+import 'package:MyDeadliftCoach/training/database/sqlite_helper.dart';
 
 final RouteObserver<PageRoute> routeObserver = RouteObserver<PageRoute>();
 

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:mydeadliftcouch/training/database/sqlite_helper.dart';
+import 'package:MyDeadliftCoach/training/database/sqlite_helper.dart';
 import 'history_details.dart';
 
 class HistoryPage extends StatefulWidget {
