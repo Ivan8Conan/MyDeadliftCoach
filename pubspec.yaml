@@ -74,7 +74,7 @@ flutter:
     - assets/images/deadlifttips2.jfif
     - assets/images/deadlifttips3.webp
     - assets/images/LogoNativeSplash.png
-  
+    - assets/adi-registration.properties
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
