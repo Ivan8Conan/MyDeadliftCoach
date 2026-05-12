@@ -1,4 +1,5 @@
 // SUDAH DIOPTIMASI — Versi Final
+import 'dart:io';
 import 'dart:ui';
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
@@ -70,12 +71,14 @@ class CameraService {
     ResolutionPreset preset,
   ) async {
     if (_isDisposed) return;
-
     controller = CameraController(
       camera,
       preset,
       enableAudio: isAudioEnabled,
-      imageFormatGroup: ImageFormatGroup.yuv420,
+      // imageFormatGroup: ImageFormatGroup.yuv420, // V1
+      imageFormatGroup: Platform.isAndroid 
+          ? ImageFormatGroup.nv21 
+          : ImageFormatGroup.bgra8888,
     );
 
     await controller!.initialize();
