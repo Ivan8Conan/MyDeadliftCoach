@@ -452,7 +452,8 @@ class _IsolateResponse {
 }
 
 
-
+// Fungsi ini berjalan secara asinkron di BACKGROUND THREAD.
+  // Mencegah HP nge-lag/freeze (Main UI Thread tetap mulus di 60 FPS) saat mengeksekusi ratusan if-else klasifikasi ML
 void _classifierIsolateEntry(SendPort mainSendPort) {
   final classifier = DeadliftClassifier();
   final receivePort = ReceivePort();
@@ -460,6 +461,7 @@ void _classifierIsolateEntry(SendPort mainSendPort) {
 
   receivePort.listen((message) {
     if (message is _IsolateRequest) {
+      // Melakukan prediksi ML, lalu mengirim hasilnya kembali ke UI Utama lewat Port.
       try {
         final result = classifier.predict(message.features);
         mainSendPort.send(_IsolateResponse(
@@ -577,16 +579,20 @@ class PostureAnalysisService {
     }
   }
 
+  // FASE KALIBRASI: MENGHITUNG ADAPTIVE THRESHOLD (Bukan Hardcoded)
   void _updateBaseline(Map<String, double> angles) {
     if (_state != 'IDLE') return;
     _baselineLutut.add(angles['lutut']!);
     _baselinePinggul.add(angles['pinggul']!);
 
+    // Menahan memori hanya untuk 30 frame terakhir saat berdiri tegak (Sliding Window)
     if (_baselineLutut.length > _baselineWindow) {
       _baselineLutut.removeAt(0);
       _baselinePinggul.removeAt(0);
     }
 
+    // Jika kalibrasi selesai, hitung RATA-RATA sudut, lalu dikali 0.88 (88%).
+    // Ini memastikan threshold disesuaikan dengan postur berdiri pengguna dengan proporsi tubuh berbeda
     if (_baselineLutut.length >= _baselineWindow) {
       final meanLutut =
           _baselineLutut.reduce((a, b) => a + b) / _baselineLutut.length;
@@ -598,6 +604,7 @@ class PostureAnalysisService {
     }
   }
 
+  // GATEKEEPER — deteksi start/end satu repetisi
   void _processGatekeeper(Map<String, double> angles) {
     final lutut   = angles['lutut']!;
     final pinggul = angles['pinggul']!;
@@ -605,6 +612,7 @@ class PostureAnalysisService {
     final lututThresh  = _isCalibrated ? _lututThreshold  : 155.0;
     final pinggulThresh = _isCalibrated ? _pinggulThreshold : 145.0;
 
+    // Jika posisi tubuh ditekuk melewati batas 88% (Threshold)
     if (_state == 'IDLE') {
       if (lutut < lututThresh && pinggul < pinggulThresh) {
         _state = 'ACTIVE';
@@ -614,25 +622,27 @@ class PostureAnalysisService {
         _pinggulStats.reset();
         _punggungStats.reset();
 
-        // Beritahu kamera untuk naik ke ~20fps
+        // Beritahu kamera untuk naik ke ~20fps agar gerakan ditangkap dengan detail
         cameraServiceRef?.setGatekeeperState(true);
         onStateChanged?.call('ACTIVE');
       }
     } else if (_state == 'ACTIVE') {
+      // Saat bergerak, terus update nilai Welford (Mean & Std)
       _lututStats.update(lutut);
       _pinggulStats.updateWithVelocity(pinggul, _frameTime);
       _punggungStats.update(angles['punggung']!);
       _activeFrameCount++;
 
+      // Jika user berdiri tegak lagi (melewati ambang batas ke atas)
       if (lutut > lututThresh && pinggul > pinggulThresh) {
         _idleCount++;
         if (_idleCount >= _idleThreshold && _activeFrameCount >= _minFrames) {
-          _runClassificationIsolate();
-          _state = 'IDLE';
+          _runClassificationIsolate(); // Panggil Klasifikasi ML
+          _state = 'IDLE'; // Reset state ke IDLE untuk tunggu rep berikutnya
           _activeFrameCount = 0;
           _idleCount = 0;
 
-          // Kembalikan kamera ke ~6fps
+          // Kembalikan kamera ke ~6fps untuk efisiensi
           cameraServiceRef?.setGatekeeperState(false);
           onStateChanged?.call('IDLE');
         }

@@ -4,7 +4,7 @@ import 'dart:math';
 class RunningStats {
   int _n = 0;
   double _mean = 0;
-  double _m2 = 0;
+  double _m2 = 0; // Menyimpan selisih kuadrat untuk varians
   double _min = double.infinity;
   double _max = double.negativeInfinity;
 
@@ -13,6 +13,9 @@ class RunningStats {
   final List<double> _velocities = [];
   double _velocityStd = 0.0;
 
+  // Fungsi ini berjalan setiap ada frame baru.
+  // Mencegah Memory Leak karena kita tidak menyimpan List koordinat yang terus memanjang.
+  // Memori yang dipakai konstan O(1).
   void update(double x) {
     _n++;
     final delta = x - _mean;

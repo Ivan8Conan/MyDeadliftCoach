@@ -20,6 +20,9 @@ class TrainingCapturePage extends StatefulWidget {
 }
 
 class _TrainingCapturePageState extends State<TrainingCapturePage> {
+  // Arsitektur menggunakan 'Separation of Concerns' (Pemisahan Tugas).
+  // Kamera, MediaPipe (Ekstraksi), dan Machine Learning (Analisis) dipisah ke service independen.
+  // Ini membuat kode modular dan sangat mudah di-maintain.
   final CameraService _cameraService = CameraService();
   final MediaPipeService _mediaPipeService = MediaPipeService();
   final PostureAnalysisService _postureService = PostureAnalysisService();
@@ -46,30 +49,35 @@ class _TrainingCapturePageState extends State<TrainingCapturePage> {
     _setup();
   }
 
+// Menghubungkan Kamera -> MediaPipe -> Classifier
 Future<void> _setup() async {
   await _initDatabaseSession();
-  await _postureService.initIsolate();
+  await _postureService.initIsolate(); // Inisiasi background thread untuk ML
 
   // Sambungkan referensi kamera agar adaptive fps bisa bekerja
   _postureService.cameraServiceRef = _cameraService; //v2
   _postureService.currentSessionId = _currentSessionId;
 
+  // EVENT LISTENER 1: Hasil Klasifikasi ML Selesai
   _postureService.onClassificationResult = (result) {
     if (!mounted || _isDisposed) return;
     setState(() {
       _pinnedResult = result;
-      _pinnedAt = DateTime.now();
+      _pinnedAt = DateTime.now(); // Memicu penahanan teks feedback selama 3 detik di layar
       _status = result;
       _totalRepetisi++;
 
+      // Kalkulasi rasio error secara real-time untuk penentuan skor akhir nanti
       if (!result.isGood) {
         _errorCount++;
       }
     });
   };
 
+  // EVENT LISTENER 2: Status FSM Berubah (IDLE / ACTIVE)
   _postureService.onStateChanged = (newState) {
     if (_isDisposed) return;
+    // Mengubah akurasi ML Kit secara dinamis. 'Accurate' saat mengangkat, 'Base' saat diam.
     _mediaPipeService.switchModel(useAccurate: newState == 'ACTIVE');
   };
 
@@ -79,8 +87,10 @@ Future<void> _setup() async {
     }
   };
 
+  // EVENT LISTENER 3: Aliran Data Keypoint dari MediaPipe
   _mediaPipeService.onKeypointsUpdated = (keypoints) {
     if (mounted && !_isDisposed) {
+      // Melempar keypoints ke algoritma Welford dan Gatekeeper
       final newStatus = _postureService.analyzePosture(keypoints);
       setState(() {
         _keypoints = keypoints;
@@ -89,11 +99,13 @@ Future<void> _setup() async {
     }
   };
 
+  // EVENT LISTENER 4: Kamera Siap
   _cameraService.onCameraStateChanged = (isActive) async {
     if (!mounted || !isActive || _isDisposed) return;
     setState(() => _isCameraReady = true);
     await _mediaPipeService.initialize();
 
+    // Meneruskan buffer byte dari kamera ke ML Kit
     _cameraService.onImageAvailable = (inputImage) {
       _mediaPipeService.processImage(inputImage);
     };
@@ -112,8 +124,10 @@ Future<void> _setup() async {
   }
 }
 
+// Fungsi ini dijalankan saat halaman dibuka. 
+// Berfungsi merekam awalan sesi ke database SQLite.
 Future<void> _initDatabaseSession() async {
-    // BuatUser Dummy jika kosong
+    // Buat User Dummy jika kosong
     final db = await SQLiteHelper.instance.database;
     final users = await db.query('users');
     if (users.isEmpty) {
@@ -136,6 +150,8 @@ Future<void> _initDatabaseSession() async {
     print("ID User: $_currentSessionId");
   }
 
+  // Fungsi ini berjalan saat user keluar halaman (Kamera ditutup).
+  // Mengkalkulasi SKOR EFEKTIVITAS (Bintang 1-5) berdasarkan rasio gerakan benar vs salah.
   Future<void> _closeDatabaseSession() async {
     if (_currentSessionId != null) {
       double finalScore = 0.0;
@@ -145,7 +161,8 @@ Future<void> _initDatabaseSession() async {
         
         finalScore = (correctReps / _totalRepetisi) * 5.0;
       }
-      
+
+      // Mengupdate baris sesi di database
       await SQLiteHelper.instance.updateSession(_currentSessionId!, {
         'waktu_selesai': DateTime.now().toIso8601String(),
         'jumlah_repetisi': _totalRepetisi,
@@ -155,6 +172,8 @@ Future<void> _initDatabaseSession() async {
     }
   }
 
+  // UX Mechanism (Terminal Feedback).
+  // Teks hasil (misal: "Punggung Bungkuk") di-pin di layar selama 3 detik (_pinDuration)
   PostureStatus _getDisplayStatus(PostureStatus latest) {
     if (_pinnedResult != null && _pinnedAt != null) {
       if (DateTime.now().difference(_pinnedAt!) < _pinDuration) {
@@ -168,10 +187,10 @@ Future<void> _initDatabaseSession() async {
   @override
   void dispose() {
     _isDisposed = true;
-    _closeDatabaseSession();
-    _postureService.dispose();
-    _mediaPipeService.dispose();
-    _cameraService.dispose();
+    _closeDatabaseSession(); // Menutup dan menyimpan sesi DB
+    _postureService.dispose(); // Mematikan Isolate Thread ML
+    _mediaPipeService.dispose(); // Mematikan model ML Kit
+    _cameraService.dispose(); // Melepas sensor kamera
     super.dispose();
   }
 

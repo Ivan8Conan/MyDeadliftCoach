@@ -5,6 +5,9 @@ import 'trainingpage.dart';
 import 'historypage.dart';
 import 'package:MyDeadliftCoach/training/database/sqlite_helper.dart';
 
+// RouteObserver digunakan untuk mendeteksi siklus navigasi antar halaman.
+// Ini memungkinkan HomePage untuk me-refresh data secara otomatis (melalui didPopNext) 
+// ketika pengguna kembali dari halaman Latihan atau Riwayat.
 final RouteObserver<PageRoute> routeObserver = RouteObserver<PageRoute>();
 
 class HomePage extends StatefulWidget {
@@ -22,6 +25,8 @@ class _HomePageState extends State<HomePage>
   final Color _iosBlue = const Color(0xFF007AFF);
   final Color _iosCardColor = Colors.white;
 
+  // Menggunakan AnimationController untuk mengontrol animasi masuk (Entrance Animation) 
+  // secara bertahap.
   late AnimationController _profileController;
   late AnimationController _cardController;
   late AnimationController _tipsController;
@@ -52,7 +57,8 @@ class _HomePageState extends State<HomePage>
     _startAnimations();
   }
 
-  // Menarik Data dari SQLite
+  // Fungsi asinkronus ini menarik data langsung dari SQLite lokal (Serverless).
+  // Keunggulannya: Dashboard langsung terisi tanpa delay (Zero Latency).
   Future<void> _loadData() async {
     try {
       final sessions = await SQLiteHelper.instance.getAllSessions();
@@ -61,6 +67,7 @@ class _HomePageState extends State<HomePage>
         double totalScore = 0.0;
         int validScoreCount = 0;
 
+        // Melakukan agregasi (perhitungan rata-rata) skor efektivitas dari seluruh sesi latihan.
         for (var s in sessions) {
           if (s['rating_efektivitas'] != null) {
             totalScore += (s['rating_efektivitas'] as num).toDouble();
@@ -72,10 +79,11 @@ class _HomePageState extends State<HomePage>
         double avgScore = validScoreCount > 0 ? totalScore / validScoreCount : 0.0;
         int avgPercentage = ((avgScore / 5.0) * 100).round();
 
+        // Memperbarui UI dengan data terbaru
         setState(() {
           _totalSessions = total;
           _averageAccuracy = "$avgPercentage%";
-          _lastSession = sessions.first;
+          _lastSession = sessions.first; // Karena query diurutkan DESC, index 0 adalah sesi terbaru.
         });
       } else {
         setState(() {
@@ -89,6 +97,8 @@ class _HomePageState extends State<HomePage>
     }
   }
 
+  // Menjalankan animasi secara berurutan (delay 100ms, 200ms, 300ms)
+  // untuk menghindari beban render yang bersamaan pada GPU smartphone.
   void _startAnimations() {
     _profileController.reset();
     _cardController.reset();
@@ -113,7 +123,7 @@ class _HomePageState extends State<HomePage>
 
   @override
   void dispose() {
-    routeObserver.unsubscribe(this);
+    routeObserver.unsubscribe(this); // Mencegah memory leak dari listener navigasi
     _profileController.dispose();
     _cardController.dispose();
     _tipsController.dispose();
@@ -123,6 +133,8 @@ class _HomePageState extends State<HomePage>
   @override
   void didPushNext() {}
 
+  // Ketika user selesai latihan dan menekan tombol 'Back' ke Homepage,
+  // didPopNext() akan terpicu dan otomatis memanggil _loadData() untuk mengupdate Statistik secara live.
   @override
   void didPopNext() {
     _loadData();
@@ -138,6 +150,8 @@ class _HomePageState extends State<HomePage>
   Widget _buildHomeContent() {
     return Scaffold(
       backgroundColor: _iosBgColor,
+      // CustomScrollView dan Slivers digunakan untuk optimasi perenderan list.
+      // Hanya widget yang masuk ke dalam layar (viewport) yang akan dirender oleh sistem.
       body: CustomScrollView(
         physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
         slivers: [

@@ -104,7 +104,40 @@ class _InfoTrainingPageState extends State<InfoTrainingPage> {
             // Indikator Titik (Dots)
             _buildDotsIndicator(),
             
-            const SizedBox(height: 32),
+            const SizedBox(height: 24),
+
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.red.withOpacity(0.3)),
+                ),
+                child: const Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.warning_amber_rounded, color: Colors.red, size: 20),
+                    SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        "DISCLAIMER: Aplikasi ini adalah purwarupa (prototype) dan tidak menggantikan peran pelatih profesional maupun saran medis. Risiko cedera ditanggung pengguna.",
+                        textAlign: TextAlign.justify,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.red,
+                          fontWeight: FontWeight.w600,
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            
+            const SizedBox(height: 16),
 
             // Tombol Aksi Bawah
             Padding(

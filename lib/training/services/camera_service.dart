@@ -1,6 +1,7 @@
 // SUDAH DIOPTIMASI — Versi Final
 import 'dart:io';
 import 'dart:ui';
+import 'dart:typed_data';
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
@@ -147,6 +148,7 @@ class CameraService {
     }
   }
 
+  // BEFORE
   InputImage? _toInputImage(CameraImage image, CameraDescription camera) {
     try {
       final format = InputImageFormatValue.fromRawValue(image.format.raw);

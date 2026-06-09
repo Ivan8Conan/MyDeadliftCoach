@@ -135,16 +135,18 @@ class MediaPipeService {
                     .reduce((a, b) => a + b) /
                 keypoints.length;
 
-        // Update quality counter
+        // // Jika visibilitas < 40%
         if (avgVisibility < 0.4) {
-          // Frame ada tapi kualitas buruk
+          // Frame ada tapi kualitas buruk, Tambahkan 'Penalti' ke Counter Bad Frame
           _lowQualityCount =
               (_lowQualityCount + _badFramePenalty).clamp(0, 20);
         } else {
-          // Frame bagus — kurangi counter secara gradual
+          // Jika Frame bagus kurangi penalti secara bertahap
           _lowQualityCount = (_lowQualityCount - 1).clamp(0, 20);
         }
 
+        // Jika Penalti sudah melampaui batas (_lowQualityThreshold)
+        // Sistem akan MENGABAIKAN (Return/Skip) pemrosesan ML pada frame ini agar prediksi tidak error.
         _consecutiveFailures = 0;
         currentKeypoints = keypoints;
         onKeypointsUpdated?.call(keypoints);
