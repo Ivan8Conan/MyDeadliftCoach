@@ -122,7 +122,7 @@ class _InfoTrainingPageState extends State<InfoTrainingPage> {
                     SizedBox(width: 12),
                     Expanded(
                       child: Text(
-                        "DISCLAIMER: Aplikasi ini adalah purwarupa (prototype) dan tidak menggantikan peran pelatih profesional maupun saran medis. Risiko cedera ditanggung pengguna.",
+                        "PENTING: Aplikasi ini tidak menggantikan pelatih profesional atau saran medis. Tetap konsultasikan latihan Anda dengan Personal Trainer. Risiko cedera ditanggung pengguna.",
                         textAlign: TextAlign.justify,
                         style: TextStyle(
                           fontSize: 12,
